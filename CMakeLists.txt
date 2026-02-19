@@ -21,6 +21,7 @@ if(DAP_TARGET STREQUAL "sdl2")
     add_executable(dap-sim
         src/main.c
         src/hal/sdl2/hal_sdl2.c
+        src/ui/font.c
     )
 
     target_include_directories(dap-sim PRIVATE
