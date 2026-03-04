@@ -11,7 +11,7 @@ typedef struct {
     const char *track_title;    /* "Clair de Lune"            */
     const char *artist;         /* "Claude Debussy"           */
     const char *album;          /* "Suite Bergamasque"        */
-    const char *year;           /* "1905"                     */
+    const char *year;           /* "1905"  (up to 16 chars)   */
     const char *file_format;    /* "FLAC", "WAV", "MP3"       */
     int         bit_depth;      /* 16, 24, 32                 */
     int         sample_rate_hz; /* 44100, 48000, 96000        */
@@ -54,5 +54,11 @@ void screen_info_panel_draw(void        *renderer,
 
 /** Release any resources allocated in _init. */
 void screen_now_playing_destroy(void);
+
+/** Draw a volume feedback overlay on top of the current screen.
+ *  volume_pct: 0–100. Call after the active screen draw,
+ *  before SDL_RenderPresent.                                     */
+void draw_volume_overlay(void *renderer, const Theme *theme,
+                         int volume_pct, int screen_w);
 
 #endif /* SCREEN_NOW_PLAYING_H */

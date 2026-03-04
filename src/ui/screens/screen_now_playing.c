@@ -81,6 +81,95 @@ static void fmt_time(char *buf, int sec)
 }
 
 /* ─────────────────────────────────────────────
+   Word-wrap text renderer.
+
+   Renders `text` word-wrapped within `max_w` pixels.
+   Each line break advances by (line_h + 2) px.
+   Stops after `max_lines` lines (0 = unlimited).
+   Returns the y position after the final line.
+───────────────────────────────────────────── */
+static int draw_text_wrapped(SDL_Renderer *ren, TTF_Font *font,
+                              const char *text, Color c,
+                              int x, int y, int max_w, int max_lines)
+{
+    if (!text || !font || !*text) return y;
+
+    SDL_Color col = { (c>>16)&0xFF, (c>>8)&0xFF, c&0xFF, 255 };
+    int line_h = 0;
+    { int dummy; TTF_SizeUTF8(font, "Ag", &dummy, &line_h); }
+
+    const char *src   = text;
+    int         lines = 0;
+
+    while (*src) {
+        /* Skip leading spaces at the start of each line */
+        while (*src == ' ') src++;
+        if (!*src) break;
+
+        if (max_lines > 0 && lines >= max_lines) break;
+
+        const char *line_start  = src;
+        const char *last_fit    = src;   /* furthest word boundary that fit */
+        const char *p           = src;
+        int         first_word  = 1;
+
+        while (*p) {
+            /* Advance to end of current word */
+            const char *word_end = p;
+            while (*word_end && *word_end != ' ') word_end++;
+
+            /* Measure from line_start to word_end */
+            char tmp[512];
+            int  len = (int)(word_end - line_start);
+            if (len >= (int)sizeof(tmp)) len = (int)sizeof(tmp) - 1;
+            memcpy(tmp, line_start, (size_t)len);
+            tmp[len] = '\0';
+
+            int tw;
+            TTF_SizeUTF8(font, tmp, &tw, NULL);
+
+            if (tw <= max_w || first_word) {
+                last_fit   = word_end;
+                first_word = 0;
+                /* Advance past word and any spaces */
+                p = word_end;
+                while (*p == ' ') p++;
+            } else {
+                break;
+            }
+        }
+
+        /* Render line_start..last_fit */
+        int len = (int)(last_fit - line_start);
+        if (len > 0) {
+            char line_buf[512];
+            if (len >= (int)sizeof(line_buf)) len = (int)sizeof(line_buf) - 1;
+            memcpy(line_buf, line_start, (size_t)len);
+            line_buf[len] = '\0';
+
+            SDL_Surface *surf = TTF_RenderUTF8_Blended(font, line_buf, col);
+            if (surf) {
+                SDL_Texture *tex = SDL_CreateTextureFromSurface(ren, surf);
+                SDL_Rect dst = { x, y, surf->w, surf->h };
+                SDL_RenderCopy(ren, tex, NULL, &dst);
+                SDL_DestroyTexture(tex);
+                SDL_FreeSurface(surf);
+            }
+        }
+
+        y += line_h + 2;
+        lines++;
+        src = last_fit;
+        while (*src == ' ') src++;
+
+        /* Safety: avoid infinite loop if a single word fills more than max_w */
+        if (src == line_start) src++;
+    }
+
+    return y;
+}
+
+/* ─────────────────────────────────────────────
    Font cache  (loaded once in _init)
 ───────────────────────────────────────────── */
 static TTF_Font *g_fonts[FONT_COUNT] = {0};
@@ -113,39 +202,33 @@ void screen_now_playing_destroy(void)
 
 /* ─────────────────────────────────────────────
    Scrolling top-bar state
-   Resets when the label text changes.
 ───────────────────────────────────────────── */
-#define TOPBAR_PAUSE_FRAMES  90   /* ~1.5 s hold at each end  */
-#define TOPBAR_PX_PER_2TICK   1   /* 1 pixel every 2 frames   */
+#define TOPBAR_PAUSE_FRAMES  90
 
 static int  g_scroll_tick = 0;
 static char g_scroll_last[128] = {0};
 
-/* Draw "Artist  –  Album" in the top bar with a slow scrolling marquee
-   when the text is wider than the available container.                  */
 static void draw_topbar(SDL_Renderer *ren, const Theme *t,
                         const NowPlayingState *s, int w)
 {
-    /* separator line */
     set_color(ren, t->surface_alt, 255);
     SDL_RenderDrawLine(ren, 0, t->topbar_height - 1, w, t->topbar_height - 1);
 
     if (!g_fonts[FONT_SM]) return;
 
     char label[128];
-    snprintf(label, sizeof(label), "%s  \xe2\x80\x93  %s",   /* "–" UTF-8 */
+    snprintf(label, sizeof(label), "%s  \xe2\x80\x93  %s",
              s->artist ? s->artist : "",
              s->album  ? s->album  : "");
 
-    /* reset scroll when track/album changes */
     if (strncmp(label, g_scroll_last, sizeof(g_scroll_last)) != 0) {
         snprintf(g_scroll_last, sizeof(g_scroll_last), "%s", label);
         g_scroll_tick = 0;
     }
 
-    const int PAD     = 8;
-    const int cont_w  = w - PAD * 2;
-    const int cont_x  = PAD;
+    const int PAD    = 8;
+    const int cont_w = w - PAD * 2;
+    const int cont_x = PAD;
     const int text_cy = t->topbar_height / 2;
 
     SDL_Color col = { (t->text_secondary>>16)&0xFF,
@@ -157,7 +240,6 @@ static void draw_topbar(SDL_Renderer *ren, const Theme *t,
     int text_w = surf->w;
 
     if (text_w <= cont_w) {
-        /* fits — centre it, no scrolling needed */
         SDL_Texture *tex = SDL_CreateTextureFromSurface(ren, surf);
         SDL_Rect dst = { cont_x + (cont_w - text_w)/2,
                          text_cy - surf->h/2,
@@ -165,31 +247,24 @@ static void draw_topbar(SDL_Renderer *ren, const Theme *t,
         SDL_RenderCopy(ren, tex, NULL, &dst);
         SDL_DestroyTexture(tex);
     } else {
-        /* text wider than container — marquee scroll */
-        int excess = text_w - cont_w;
-        int scroll_frames = excess * 2;                          /* 1 px / 2 frames */
-        int cycle = TOPBAR_PAUSE_FRAMES + scroll_frames + TOPBAR_PAUSE_FRAMES;
-        int tick  = g_scroll_tick % cycle;
+        int excess        = text_w - cont_w;
+        int scroll_frames = excess * 2;
+        int cycle         = TOPBAR_PAUSE_FRAMES + scroll_frames + TOPBAR_PAUSE_FRAMES;
+        int tick          = g_scroll_tick % cycle;
 
         int scroll_px;
-        if (tick < TOPBAR_PAUSE_FRAMES) {
+        if (tick < TOPBAR_PAUSE_FRAMES)
             scroll_px = 0;
-        } else if (tick < TOPBAR_PAUSE_FRAMES + scroll_frames) {
+        else if (tick < TOPBAR_PAUSE_FRAMES + scroll_frames)
             scroll_px = (tick - TOPBAR_PAUSE_FRAMES) / 2;
-        } else {
+        else
             scroll_px = excess;
-        }
         g_scroll_tick++;
 
         SDL_Texture *tex = SDL_CreateTextureFromSurface(ren, surf);
-
-        /* clip to container so text doesn't bleed outside */
         SDL_Rect clip = { cont_x, 0, cont_w, t->topbar_height };
         SDL_RenderSetClipRect(ren, &clip);
-
-        SDL_Rect dst = { cont_x - scroll_px,
-                         text_cy - surf->h/2,
-                         surf->w, surf->h };
+        SDL_Rect dst = { cont_x - scroll_px, text_cy - surf->h/2, surf->w, surf->h };
         SDL_RenderCopy(ren, tex, NULL, &dst);
         SDL_RenderSetClipRect(ren, NULL);
         SDL_DestroyTexture(tex);
@@ -198,7 +273,6 @@ static void draw_topbar(SDL_Renderer *ren, const Theme *t,
     SDL_FreeSurface(surf);
 }
 
-/* ── Album art square, centred horizontally ── */
 static void draw_album_art(SDL_Renderer *ren, const Theme *t,
                            const NowPlayingState *s,
                            int w, int art_y, int art_size)
@@ -230,7 +304,6 @@ static void draw_album_art(SDL_Renderer *ren, const Theme *t,
     }
 }
 
-/* ── Progress bar: thin line + pill scrubber ── */
 static void draw_progress(SDL_Renderer *ren, const Theme *t,
                           const NowPlayingState *s,
                           int bar_x, int bar_y, int bar_w)
@@ -262,7 +335,6 @@ static void draw_progress(SDL_Renderer *ren, const Theme *t,
     fill_rounded_rect(ren, pill, t->pill_radius);
 }
 
-/* ── Timestamps left / right of bar ── */
 static void draw_timestamps(SDL_Renderer *ren, const Theme *t,
                             const NowPlayingState *s,
                             int bar_x, int ts_y, int bar_w)
@@ -283,15 +355,6 @@ static void draw_timestamps(SDL_Renderer *ren, const Theme *t,
 
 /* ═══════════════════════════════════════════
    PUBLIC: screen_now_playing_draw
-
-   320×240 layout (top → bottom):
-     [  0 –  23]  top bar 24px  — "Artist – Album" scrolling marquee
-     [ 24 –  31]  gap 8px
-     [ 32 – 191]  album art 160×160 centred
-     [192 – 199]  gap 8px
-     [200 – 201]  progress bar (2px line)
-     [207 – 217]  timestamps
-     [226 – 236]  "▲ Info" hint
 ═══════════════════════════════════════════ */
 void screen_now_playing_draw(void        *renderer,
                              const Theme *theme,
@@ -313,16 +376,17 @@ void screen_now_playing_draw(void        *renderer,
     draw_topbar(ren, t, s, screen_w);
     draw_album_art(ren, t, s, screen_w, ART_Y, ART_SIZE);
 
-    int bar_x  = MARGIN;
-    int bar_w  = screen_w - MARGIN * 2;
-    int bar_y  = ART_Y + ART_SIZE + 10;     /* 10px gap below art */
-    int ts_y   = bar_y + 6;
+    int bar_x = MARGIN;
+    int bar_w = screen_w - MARGIN * 2;
+    int bar_y = ART_Y + ART_SIZE + 10;
+    int ts_y  = bar_y + 6;
 
     draw_progress(ren, t, s, bar_x, bar_y, bar_w);
     draw_timestamps(ren, t, s, bar_x, ts_y, bar_w);
 
-    /* navigation hint */
-    draw_text_centered(ren, g_fonts[FONT_SM], "\xe2\x96\xb2 Info",
+    /* Navigation hint: ▲ Info   ▼ Library */
+    draw_text_centered(ren, g_fonts[FONT_SM],
+                       "\xe2\x96\xb2 Info   \xe2\x96\xbc Library",
                        t->text_inactive, screen_w / 2, screen_h - 6);
 
     (void)screen_h;
@@ -331,14 +395,8 @@ void screen_now_playing_draw(void        *renderer,
 /* ═══════════════════════════════════════════
    PUBLIC: screen_info_panel_draw
 
-   Full-screen metadata overlay.
-   Activated by pressing UP on now-playing.
-
-   320×240 layout:
-     [  0 –  23]  header bar: "Track Info"
-     [ 23 –  24]  separator
-     [ 30 – 215]  6 rows × 30px: Track / Artist / Album / Year / Format / Bitrate
-     [226 – 236]  "▲ Back" hint
+   Uses word-wrap (max 2 lines per field) so
+   long values never exit the screen bounds.
 ═══════════════════════════════════════════ */
 void screen_info_panel_draw(void        *renderer,
                             const Theme *theme,
@@ -353,56 +411,110 @@ void screen_info_panel_draw(void        *renderer,
     set_color(ren, t->bg, 255);
     SDL_RenderClear(ren);
 
-    /* header */
+    /* Header */
     set_color(ren, t->surface_alt, 255);
     SDL_RenderDrawLine(ren, 0, t->topbar_height - 1, screen_w, t->topbar_height - 1);
     draw_text_centered(ren, g_fonts[FONT_SM], "Track Info",
                        t->text_secondary, screen_w / 2, t->topbar_height / 2);
 
-    /* row layout */
-    const int LABEL_X  = 8;
-    const int VALUE_X  = 72;
-    const int ROW_H    = 22;
+    const int LABEL_X = 8;
+    const int VALUE_X = 68;
+    const int VALUE_W = screen_w - VALUE_X - 8;
+    const int ROW_GAP = 5;   /* vertical gap between fields */
     int y = t->topbar_height + 8;
 
-    /* helper draws one label+value row */
-    #define ROW(label, value) do { \
-        draw_text(ren, g_fonts[FONT_SM], (label), t->text_secondary, LABEL_X, y); \
-        draw_text(ren, g_fonts[FONT_SM], (value),  t->text_primary,   VALUE_X, y); \
-        y += ROW_H; \
+    /* FIELD: draw label at y (left), draw wrapped value at y (right of label).
+       Advances y past the tallest of the two, then adds ROW_GAP.          */
+    #define FIELD(lbl, val) do {                                              \
+        draw_text(ren, g_fonts[FONT_SM], (lbl), t->text_secondary, LABEL_X, y); \
+        int next_y = draw_text_wrapped(ren, g_fonts[FONT_SM], (val),         \
+                                       t->text_primary, VALUE_X, y,          \
+                                       VALUE_W, 2);                           \
+        y = next_y + ROW_GAP;                                                 \
     } while (0)
 
-    ROW("Track",   s->track_title  ? s->track_title : "—");
-    ROW("Artist",  s->artist       ? s->artist      : "—");
-    ROW("Album",   s->album        ? s->album       : "—");
-    ROW("Year",    s->year         ? s->year        : "—");
+    FIELD("Track",   s->track_title  ? s->track_title : "\xe2\x80\x94");
+    FIELD("Artist",  s->artist       ? s->artist      : "\xe2\x80\x94");
+    FIELD("Album",   s->album        ? s->album       : "\xe2\x80\x94");
+    FIELD("Year",    s->year && s->year[0] ? s->year  : "\xe2\x80\x94");
 
-    /* Format: "FLAC  24-bit / 96.0 kHz" */
+    /* Format string: "FLAC  24-bit / 96.0 kHz" */
     char fmt_str[64];
-    if (s->file_format && s->bit_depth > 0 && s->sample_rate_hz > 0) {
+    if (s->file_format && s->bit_depth > 0 && s->sample_rate_hz > 0)
         snprintf(fmt_str, sizeof(fmt_str), "%s  %d-bit / %.1f kHz",
-                 s->file_format,
-                 s->bit_depth,
+                 s->file_format, s->bit_depth,
                  (float)s->sample_rate_hz / 1000.f);
-    } else {
+    else
         snprintf(fmt_str, sizeof(fmt_str), "%s",
-                 s->file_format ? s->file_format : "—");
-    }
-    ROW("Format", fmt_str);
+                 s->file_format ? s->file_format : "\xe2\x80\x94");
+    FIELD("Format", fmt_str);
 
     /* Bitrate */
     char br_str[32];
     if (s->bitrate_kbps > 0)
         snprintf(br_str, sizeof(br_str), "%d kbps", s->bitrate_kbps);
     else
-        snprintf(br_str, sizeof(br_str), "—");
-    ROW("Bitrate", br_str);
+        snprintf(br_str, sizeof(br_str), "\xe2\x80\x94");
+    FIELD("Bitrate", br_str);
 
-    #undef ROW
+    #undef FIELD
 
-    /* navigation hint */
+    /* Navigation hint */
     draw_text_centered(ren, g_fonts[FONT_SM], "\xe2\x96\xb2 Back",
                        t->text_inactive, screen_w / 2, screen_h - 6);
 
     (void)screen_h;
+}
+
+/* ═══════════════════════════════════════════
+   PUBLIC: draw_volume_overlay
+
+   Drawn on top of the active screen whenever
+   volume changes. Call after the screen draw,
+   before SDL_RenderPresent.
+═══════════════════════════════════════════ */
+void draw_volume_overlay(void *renderer, const Theme *theme,
+                         int volume_pct, int screen_w)
+{
+    SDL_Renderer *ren = (SDL_Renderer *)renderer;
+    const Theme  *t   = theme;
+
+    const int OVL_W = 190, OVL_H = 22;
+    const int OVL_X = (screen_w - OVL_W) / 2;
+    const int OVL_Y = 30;   /* just below top bar */
+
+    /* Background pill */
+    set_color(ren, t->surface, 255);
+    SDL_Rect bg = { OVL_X, OVL_Y, OVL_W, OVL_H };
+    fill_rounded_rect(ren, bg, 4);
+
+    /* Border */
+    set_color(ren, t->surface_alt, 255);
+    SDL_RenderDrawRect(ren, &bg);
+
+    /* "VOL" label */
+    draw_text(ren, g_fonts[FONT_SM], "VOL",
+              t->text_secondary, OVL_X + 6, OVL_Y + 5);
+
+    /* Progress bar */
+    const int BAR_X = OVL_X + 36;
+    const int BAR_W = OVL_W - 72;
+    const int BAR_H = 4;
+    const int BAR_Y = OVL_Y + (OVL_H - BAR_H) / 2;
+
+    set_color(ren, t->accent_dim, 255);
+    SDL_Rect track = { BAR_X, BAR_Y, BAR_W, BAR_H };
+    SDL_RenderFillRect(ren, &track);
+
+    if (volume_pct > 0) {
+        set_color(ren, t->accent, 255);
+        SDL_Rect fill = { BAR_X, BAR_Y, BAR_W * volume_pct / 100, BAR_H };
+        SDL_RenderFillRect(ren, &fill);
+    }
+
+    /* Percentage text */
+    char pct[8];
+    snprintf(pct, sizeof(pct), "%d%%", volume_pct);
+    draw_text(ren, g_fonts[FONT_SM], pct,
+              t->text_primary, OVL_X + OVL_W - 28, OVL_Y + 5);
 }
