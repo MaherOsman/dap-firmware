@@ -73,9 +73,7 @@ int audio_init(void)
     /* Init decoders before opening device so Mix_LoadWAV handles FLAC */
     Mix_Init(MIX_INIT_FLAC | MIX_INIT_MP3 | MIX_INIT_OGG);
 
-    /* 44100 Hz = source sample rate, zero resampling in SDL_mixer.
-       32768-sample buffer (~742 ms) absorbs WSL2 scheduling jitter.
-       On real hardware use a much smaller buffer (512–1024 samples). */
+    /* 44100 Hz = source sample rate, zero resampling in SDL_mixer. */
     static const struct { int freq; Uint16 fmt; } configs[] = {
         { 44100, AUDIO_S32SYS },
         { 48000, AUDIO_S32SYS },
@@ -83,13 +81,19 @@ int audio_init(void)
         {     0, 0            }
     };
 
+    /* On Linux, a smaller buffer (1024-4096) is usually better.
+       WSL2 may still need a larger one, but 32768 is excessive. */
+    int buffer_size = 4096;
+    const char *env_wsl = getenv("WSL_DISTRO_NAME");
+    if (env_wsl) buffer_size = 32768;
+
     int opened = 0;
     for (int i = 0; configs[i].freq; i++) {
-        if (Mix_OpenAudio(configs[i].freq, configs[i].fmt, 2, 32768) == 0) {
+        if (Mix_OpenAudio(configs[i].freq, configs[i].fmt, 2, buffer_size) == 0) {
             int freq; Uint16 fmt; int chans;
             Mix_QuerySpec(&freq, &fmt, &chans);
-            fprintf(stderr, "Audio opened: %d Hz / %d-bit / %dch / 32768-sample buffer\n",
-                    freq, SDL_AUDIO_BITSIZE(fmt), chans);
+            fprintf(stderr, "Audio opened: %d Hz / %d-bit / %dch / %d-sample buffer\n",
+                    freq, SDL_AUDIO_BITSIZE(fmt), chans, buffer_size);
             opened = 1;
             break;
         }

@@ -18,11 +18,13 @@ void screen_library_init(void)
     for (int i = 0; i < FONT_COUNT; i++) {
         g_fonts[i] = TTF_OpenFont("assets/fonts/Roboto-Regular.ttf", FONT_SIZES[i]);
         if (!g_fonts[i])
-            g_fonts[i] = TTF_OpenFont(
-                "/usr/share/fonts/truetype/roboto/Roboto-Regular.ttf", FONT_SIZES[i]);
+            g_fonts[i] = TTF_OpenFont("/usr/share/fonts/truetype/roboto/Roboto-Regular.ttf", FONT_SIZES[i]);
         if (!g_fonts[i])
-            g_fonts[i] = TTF_OpenFont(
-                "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", FONT_SIZES[i]);
+            g_fonts[i] = TTF_OpenFont("/usr/share/fonts/google-droid-sans-fonts/DroidSans.ttf", FONT_SIZES[i]);
+        if (!g_fonts[i])
+            g_fonts[i] = TTF_OpenFont("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", FONT_SIZES[i]);
+        if (!g_fonts[i])
+            g_fonts[i] = TTF_OpenFont("/usr/share/fonts/google-carlito-fonts/Carlito-Regular.ttf", FONT_SIZES[i]);
     }
 }
 

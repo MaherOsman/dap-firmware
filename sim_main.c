@@ -167,9 +167,9 @@ static void load_track(int idx,
 
     printf("[%d/%d] %s \xe2\x80\x93 %s\n", idx + 1, tl->count, g_artist, g_title);
 
-    /* Start decoding the next track in the background while this one plays */
-    int next = (idx + 1) % tl->count;
-    audio_prefetch(tl->paths[next]);
+    /* Background prefetch disabled on Linux to prevent terminal race conditions */
+    /* int next = (idx + 1) % tl->count;
+       audio_prefetch(tl->paths[next]); */
 }
 
 /* ─────────────────────────────────────────────
@@ -234,6 +234,14 @@ int main(int argc, char *argv[])
 {
     const char *music_dir = (argc > 1) ? argv[1] : DEFAULT_MUSIC_DIR;
 
+    /* ── Sanity check for Linux terminal ── */
+    if (!getenv("DISPLAY") && !getenv("WAYLAND_DISPLAY")) {
+        fprintf(stderr, "Error: No graphical environment detected (DISPLAY or WAYLAND_DISPLAY not set).\n");
+        fprintf(stderr, "SDL2 may try to use a terminal-based driver (caca/aalib) which will crash your console.\n");
+        fprintf(stderr, "Please run from a desktop environment or via SSH with X11 forwarding.\n");
+        return 1;
+    }
+
     /* ── SDL init ── */
     if (SDL_Init(SDL_INIT_VIDEO) != 0) {
         fprintf(stderr, "SDL_Init: %s\n", SDL_GetError()); return 1;
@@ -270,13 +278,16 @@ int main(int argc, char *argv[])
         return 1;
     }
     printf("Found %d tracks — loading metadata...\n", n);
+    fflush(stdout);
     for (int i = 0; i < tl.count; i++) {
         if (!metadata_read(tl.paths[i], &g_meta[i]))
             memset(&g_meta[i], 0, sizeof(g_meta[i]));
     }
     printf("Building library hierarchy...\n");
+    fflush(stdout);
     build_library(tl.count);
     printf("Ready. %d artists.\n", g_artist_count);
+    fflush(stdout);
 
     /* ── Playback state ── */
     NowPlayingState state;
