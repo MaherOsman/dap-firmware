@@ -1,7 +1,7 @@
 # dap-firmware
 
 Firmware for a personal hi-fi digital audio player, built on an STM32H753
-(NUCLEO-H753ZI for development, Electrosmith Daisy Seed as the eventual target).
+(NUCLEO-H753ZI for development, Custom Motherboard as the eventual target).
 
 ## Layout
 
