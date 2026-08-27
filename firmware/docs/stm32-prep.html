@@ -1,0 +1,457 @@
+<title>H753ZI Bring-Up Runbook</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+
+<style>
+:root{
+  --ground:#eef0ef;
+  --panel:#ffffff;
+  --panel-2:#f6f7f6;
+  --ink:#14181a;
+  --ink-2:#454e52;
+  --ink-3:#6f797e;
+  --rule:#d6dad9;
+  --rule-2:#e6e9e8;
+  --copper:#a2501c;
+  --copper-soft:#f2e2d6;
+  --signal:#0f6b6f;
+  --signal-soft:#dcecec;
+  --warn:#8a5a04;
+  --warn-soft:#f7ecd4;
+  --good:#2c6a3a;
+  --shadow:0 1px 2px rgba(20,24,26,.05),0 8px 24px -16px rgba(20,24,26,.28);
+  --maxw:74ch;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --ground:#0e1214;
+    --panel:#161b1e;
+    --panel-2:#1b2225;
+    --ink:#e6eaea;
+    --ink-2:#a9b4b7;
+    --ink-3:#7d888c;
+    --rule:#2a3236;
+    --rule-2:#222a2d;
+    --copper:#e08a4d;
+    --copper-soft:#2e2019;
+    --signal:#5fc3c6;
+    --signal-soft:#152628;
+    --warn:#d9a441;
+    --warn-soft:#2a2317;
+    --good:#69b47e;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 30px -18px rgba(0,0,0,.9);
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#0e1214;
+  --panel:#161b1e;
+  --panel-2:#1b2225;
+  --ink:#e6eaea;
+  --ink-2:#a9b4b7;
+  --ink-3:#7d888c;
+  --rule:#2a3236;
+  --rule-2:#222a2d;
+  --copper:#e08a4d;
+  --copper-soft:#2e2019;
+  --signal:#5fc3c6;
+  --signal-soft:#152628;
+  --warn:#d9a441;
+  --warn-soft:#2a2317;
+  --good:#69b47e;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 30px -18px rgba(0,0,0,.9);
+}
+
+*{box-sizing:border-box}
+body{
+  margin:0;
+  background:var(--ground);
+  color:var(--ink);
+  font-family:"IBM Plex Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  font-size:16.5px;
+  line-height:1.62;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:calc(var(--maxw) + 6rem);margin:0 auto;padding:0 1.5rem 6rem}
+
+/* ---------- masthead ---------- */
+header.top{
+  padding:3.5rem 0 2rem;
+  border-bottom:1px solid var(--rule);
+  margin-bottom:3rem;
+}
+.eyebrow{
+  font-family:"IBM Plex Mono",ui-monospace,monospace;
+  font-size:.72rem;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--copper);font-weight:500;
+  display:flex;flex-wrap:wrap;gap:.6rem;align-items:center;
+}
+.eyebrow .dot{width:5px;height:5px;border-radius:50%;background:var(--copper);display:inline-block}
+h1{
+  font-family:"IBM Plex Sans Condensed","IBM Plex Sans",sans-serif;
+  font-weight:700;font-size:clamp(2.1rem,5.5vw,3.1rem);
+  line-height:1.05;letter-spacing:-.015em;margin:.7rem 0 .6rem;
+  text-wrap:balance;
+}
+.standfirst{font-size:1.08rem;color:var(--ink-2);max-width:60ch;margin:0}
+.meta{
+  margin-top:1.6rem;display:flex;flex-wrap:wrap;gap:.5rem 2rem;
+  font-family:"IBM Plex Mono",monospace;font-size:.78rem;color:var(--ink-3);
+}
+.meta b{color:var(--ink-2);font-weight:500}
+
+/* ---------- structure ---------- */
+section{margin:0 0 3.25rem}
+h2{
+  font-family:"IBM Plex Sans Condensed","IBM Plex Sans",sans-serif;
+  font-weight:700;font-size:1.5rem;letter-spacing:-.01em;
+  margin:0 0 .25rem;text-wrap:balance;
+}
+h2 .num{
+  font-family:"IBM Plex Mono",monospace;font-size:.8rem;color:var(--copper);
+  font-weight:500;letter-spacing:.08em;display:block;margin-bottom:.35rem;
+}
+h3{
+  font-family:"IBM Plex Sans",sans-serif;font-weight:600;font-size:1.02rem;
+  margin:2rem 0 .4rem;letter-spacing:.01em;
+}
+.lede{color:var(--ink-2);margin:.35rem 0 1.4rem;max-width:var(--maxw)}
+p{max-width:var(--maxw);margin:0 0 1rem}
+ul,ol{max-width:var(--maxw);padding-left:1.15rem;margin:0 0 1.1rem}
+li{margin-bottom:.4rem}
+a{color:var(--signal);text-underline-offset:2px}
+a:focus-visible,button:focus-visible{outline:2px solid var(--copper);outline-offset:3px;border-radius:2px}
+code{
+  font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.87em;
+  background:var(--panel-2);border:1px solid var(--rule-2);
+  padding:.08em .34em;border-radius:3px;
+}
+hr.rule{border:0;border-top:1px solid var(--rule);margin:0 0 2.5rem}
+
+/* ---------- cards ---------- */
+.card{
+  background:var(--panel);border:1px solid var(--rule);border-radius:6px;
+  padding:1.15rem 1.3rem;box-shadow:var(--shadow);
+}
+.grid{display:grid;gap:.9rem;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));margin-bottom:1.2rem}
+.grid .card p{margin:0;font-size:.93rem;color:var(--ink-2)}
+.grid .card h4{
+  margin:0 0 .35rem;font-family:"IBM Plex Sans Condensed",sans-serif;
+  font-size:1rem;font-weight:600;letter-spacing:.01em;
+}
+.k{font-family:"IBM Plex Mono",monospace;font-size:.72rem;letter-spacing:.1em;
+   text-transform:uppercase;color:var(--ink-3);display:block;margin-bottom:.5rem}
+
+/* ---------- ordered spine ---------- */
+ol.spine{list-style:none;padding:0;margin:0;max-width:none}
+ol.spine>li{
+  position:relative;padding:0 0 1.6rem 3.4rem;margin:0;
+  border-left:1px solid var(--rule);margin-left:1.05rem;
+}
+ol.spine>li:last-child{border-left-color:transparent;padding-bottom:0}
+ol.spine>li::before{
+  content:attr(data-step);
+  position:absolute;left:-1.05rem;top:0;
+  width:2.1rem;height:2.1rem;border-radius:50%;
+  background:var(--panel);border:1px solid var(--rule);
+  color:var(--copper);font-family:"IBM Plex Mono",monospace;font-size:.8rem;
+  display:flex;align-items:center;justify-content:center;font-weight:500;
+}
+ol.spine h3{margin:.1rem 0 .3rem;font-size:1.06rem}
+ol.spine p{margin:0 0 .5rem;color:var(--ink-2);font-size:.96rem}
+.proof{
+  font-family:"IBM Plex Mono",monospace;font-size:.8rem;color:var(--good);
+  display:block;margin-top:.35rem;
+}
+.proof::before{content:"PROOF  ";color:var(--ink-3);letter-spacing:.1em}
+
+/* ---------- callouts ---------- */
+.note{
+  border-left:3px solid var(--signal);background:var(--signal-soft);
+  padding:.85rem 1rem;border-radius:0 4px 4px 0;margin:0 0 1.2rem;
+  max-width:var(--maxw);
+}
+.note.gotcha{border-left-color:var(--warn);background:var(--warn-soft)}
+.note p{margin:0;font-size:.95rem}
+.note .k{color:var(--ink-3)}
+
+/* ---------- tables ---------- */
+.tablewrap{overflow-x:auto;margin:0 0 1.3rem;border:1px solid var(--rule);border-radius:6px;background:var(--panel)}
+table{border-collapse:collapse;width:100%;font-size:.88rem}
+th,td{text-align:left;padding:.55rem .8rem;border-bottom:1px solid var(--rule-2);vertical-align:top}
+thead th{
+  font-family:"IBM Plex Mono",monospace;font-size:.7rem;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--ink-3);font-weight:500;
+  background:var(--panel-2);white-space:nowrap;
+}
+tbody tr:last-child td{border-bottom:0}
+td.pin{font-family:"IBM Plex Mono",monospace;font-variant-numeric:tabular-nums;white-space:nowrap;color:var(--copper);font-weight:500}
+td.mono{font-family:"IBM Plex Mono",monospace;font-variant-numeric:tabular-nums;white-space:nowrap}
+.tag{
+  display:inline-block;font-family:"IBM Plex Mono",monospace;font-size:.68rem;
+  letter-spacing:.06em;text-transform:uppercase;padding:.12rem .4rem;
+  border-radius:3px;border:1px solid currentColor;white-space:nowrap;
+}
+.tag.done{color:var(--good)}
+.tag.next{color:var(--copper)}
+.tag.later{color:var(--ink-3)}
+
+/* ---------- footer ---------- */
+footer{
+  border-top:1px solid var(--rule);padding-top:1.5rem;margin-top:1rem;
+  color:var(--ink-3);font-size:.88rem;
+}
+footer a{color:var(--ink-2)}
+@media (max-width:520px){
+  body{font-size:16px}
+  ol.spine>li{padding-left:2.9rem}
+}
+</style>
+
+<div class="wrap">
+
+<header class="top">
+  <div class="eyebrow">
+    <span class="dot"></span><span>Pre-delivery prep</span>
+    <span class="dot"></span><span>NUCLEO-H753ZI</span>
+    <span class="dot"></span><span>Windows</span>
+  </div>
+  <h1>H753ZI Bring-Up Runbook</h1>
+  <p class="standfirst">Everything worth doing before the box arrives, in the order it pays off — toolchain, the pin plan and its two real conflicts, the H7 gotchas that eat weekends, and the firmware that's already written and tested.</p>
+  <div class="meta">
+    <span><b>Target</b> DAP first, synth after</span>
+    <span><b>Core already tested</b> 20,445 assertions</span>
+    <span><b>Updated</b> 25 Aug 2026</span>
+  </div>
+</header>
+
+<section>
+  <h2><span class="num">01 / INSTALL</span>What to put on the machine now</h2>
+  <p class="lede">All of this installs and runs with no board attached. Do it now so day one is spent on hardware, not downloads.</p>
+
+  <div class="grid">
+    <div class="card">
+      <span class="k">Required</span>
+      <h4>STM32CubeIDE</h4>
+      <p>Eclipse-based IDE, GCC toolchain, debugger and CubeMX code generator in one installer. The ST-LINK driver ships with it — install it before plugging the board in, or Windows may bind a generic driver.</p>
+    </div>
+    <div class="card">
+      <span class="k">Required</span>
+      <h4>STM32CubeH7 package</h4>
+      <p>The HAL, LL drivers, FatFs middleware and the H7 example projects. CubeIDE downloads it on first use; grab it manually so you're not waiting on it later.</p>
+    </div>
+    <div class="card">
+      <span class="k">Strongly recommended</span>
+      <h4>STM32CubeProgrammer</h4>
+      <p>Standalone flash/erase/verify plus the ST-LINK firmware updater. When the board's ST-LINK firmware is older than the IDE expects, this is the thing that fixes it.</p>
+    </div>
+    <div class="card">
+      <span class="k">Recommended</span>
+      <h4>MSYS2 (MinGW64) or WSL</h4>
+      <p>Gives you <code>gcc</code> and <code>make</code> so the host test suite in this repo runs on Windows. WSL also makes the ST community's command-line tooling far less painful.</p>
+    </div>
+    <div class="card">
+      <span class="k">Recommended</span>
+      <h4>A serial terminal</h4>
+      <p>PuTTY or Tera Term. The ST-LINK exposes a virtual COM port on <code>PD8/PD9</code> at 115200 8N1 — that's your <code>printf</code> lifeline all through bring-up.</p>
+    </div>
+    <div class="card">
+      <span class="k">Nice to have</span>
+      <h4>Git + a repo</h4>
+      <p>CubeIDE regenerates code on every <code>.ioc</code> change. Committing before each regeneration is the cheapest insurance in this whole project.</p>
+    </div>
+  </div>
+
+  <div class="note gotcha">
+    <span class="k">Not in the box</span>
+    <p>The Nucleo-H753ZI needs a <b>USB Micro-B</b> cable for its ST-LINK port and doesn't ship with one. Also confirm you have a microSD card and a way to write FAT32 to it — order both now if not.</p>
+  </div>
+</section>
+
+<hr class="rule">
+
+<section>
+  <h2><span class="num">02 / SEQUENCE</span>The bring-up order, and why it's this order</h2>
+  <p class="lede">Each step below gives you a piece of hardware you can trust, so the next failure has only one plausible cause. Skipping ahead is how people end up debugging an SD card, an SPI bus and a clock config simultaneously.</p>
+
+  <ol class="spine">
+    <li data-step="1">
+      <h3>Blink LD1 on PB0</h3>
+      <p>Proves the toolchain, the ST-LINK, flashing and the debugger all work together. Set a breakpoint inside the loop and confirm it hits — you want the debugger proven before you need it.</p>
+      <span class="proof">LED toggles at exactly 1 Hz, breakpoint halts</span>
+    </li>
+    <li data-step="2">
+      <h3>Clock the H7 to 480 MHz and prove it</h3>
+      <p>CubeMX's clock tree view is the tool; the trap is that the H7 needs VOS0 voltage scaling and the SMPS/LDO setting to match the board before it will run at 480. Verify by toggling a GPIO in a tight loop and checking the period, or by outputting the system clock on MCO.</p>
+      <span class="proof">Measured GPIO toggle rate matches the configured clock</span>
+    </li>
+    <li data-step="3">
+      <h3>Get <code>printf</code> out over the ST-LINK VCP</h3>
+      <p>Retarget <code>_write()</code> to USART3 on <code>PD8/PD9</code>. From here on, every subsequent step can report what it's doing instead of being inferred from an LED.</p>
+      <span class="proof">Text appears in PuTTY at 115200 8N1</span>
+    </li>
+    <li data-step="4">
+      <h3>SPI to the ST7789 — fill the screen red</h3>
+      <p>The driver in this repo is already written and unit-tested against a mock bus; you supply five functions (<code>write</code>, <code>set_dc</code>, <code>set_cs</code>, <code>set_reset</code>, <code>delay_ms</code>) that call the HAL. Start SPI slow (a few MHz), then raise it once it works.</p>
+      <span class="proof">Solid red 240×240, no border, no negative image</span>
+    </li>
+    <li data-step="5">
+      <h3>Mount the SD card with FatFs and list files</h3>
+      <p>SPI mode first — it's slower but far simpler than SDMMC, and correctness beats throughput while you're learning. Use the TFT board's built-in slot or the separate breakout; they're the same interface.</p>
+      <span class="proof">Filenames from a FAT32 card print over the VCP</span>
+    </li>
+    <li data-step="6">
+      <h3>Push a sine wave to the PCM5102 over I2S</h3>
+      <p>The first sound. Generate a table in RAM, feed it out by DMA in circular mode. If it's clean, your clock tree and DMA are both right; if it's grainy or intermittent, jump straight to the cache section below.</p>
+      <span class="proof">A steady 440 Hz tone, no clicks, no hiss</span>
+    </li>
+    <li data-step="7">
+      <h3>Wire the encoder and drive the menu</h3>
+      <p>The decoder and menu view model in this repo are done and tested. Poll A/B from a 1 kHz timer, feed <code>encoder_update()</code>, push the result into <code>ui_menu_move()</code>. If the knob scrolls backwards, swap the A and B wires.</p>
+      <span class="proof">One list row per physical detent, no skipping</span>
+    </li>
+    <li data-step="8">
+      <h3>Join them: SD → ring buffer → I2S</h3>
+      <p>This is the actual DAP. The <code>player</code> module already encodes the preroll and refill policy; your job is the reader that fills the ring and the DMA half/full callbacks that drain it.</p>
+      <span class="proof">A WAV file plays end to end with zero underruns</span>
+    </li>
+  </ol>
+</section>
+
+<hr class="rule">
+
+<section>
+  <h2><span class="num">03 / PINS</span>The pin plan — and the two conflicts that bite</h2>
+  <p class="lede">The Nucleo-H753ZI populates Ethernet and USB, so a handful of the "obvious" pins are already taken. CubeMX flags conflicts live in its pin view — treat that, plus the board's user manual (UM2407), as the final authority over any table including this one.</p>
+
+  <div class="note gotcha">
+    <span class="k">Conflict 1 — SPI1 MOSI</span>
+    <p>The textbook SPI1 pinout is <code>PA5/PA6/PA7</code>, but on this board <b><code>PA7</code> is wired to Ethernet RMII_CRS_DV</b>. The Arduino-header SPI1 uses <b><code>PB5</code> for MOSI</b> instead. Wire your display to PB5 and this is a non-event; wire it to PA7 and you'll spend an evening on a display that never responds.</p>
+  </div>
+
+  <div class="note gotcha">
+    <span class="k">Conflict 2 — the ST-LINK UART</span>
+    <p><code>PD8</code> and <code>PD9</code> belong to the ST-LINK virtual COM port. Don't reassign them to something else and then wonder where your <code>printf</code> went. Same logic for <code>PC13</code> (user button) and <code>PB0/PE1/PB14</code> (the three LEDs) — free to use, but you lose the built-in indicator.</p>
+  </div>
+
+  <h3>Fixed by the board</h3>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>Pin(s)</th><th>Function</th><th>Note</th></tr></thead>
+      <tbody>
+        <tr><td class="pin">PD8 / PD9</td><td>USART3 TX/RX</td><td>ST-LINK virtual COM port, 115200 8N1</td></tr>
+        <tr><td class="pin">PB0 / PE1 / PB14</td><td>LD1 / LD2 / LD3</td><td>Green / yellow / red user LEDs</td></tr>
+        <tr><td class="pin">PC13</td><td>User button</td><td>Blue B1 button</td></tr>
+        <tr><td class="pin">PA1, PA2, PA7, PB13,<br>PC1, PC4, PC5, PG11, PG13</td><td>Ethernet RMII</td><td>Populated on this board — avoid all of these</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Proposed for the DAP</h3>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>Signal</th><th>Pin</th><th>Peripheral</th><th>Goes to</th></tr></thead>
+      <tbody>
+        <tr><td>SCK</td><td class="pin">PA5</td><td class="mono">SPI1</td><td>ST7789 SCK + SD CLK</td></tr>
+        <tr><td>MISO</td><td class="pin">PA6</td><td class="mono">SPI1</td><td>SD DO (display is write-only)</td></tr>
+        <tr><td>MOSI</td><td class="pin">PB5</td><td class="mono">SPI1</td><td>ST7789 SDA + SD DI</td></tr>
+        <tr><td>TFT CS</td><td class="pin">PD14</td><td class="mono">GPIO out</td><td>ST7789 CS</td></tr>
+        <tr><td>TFT D/C</td><td class="pin">PD15</td><td class="mono">GPIO out</td><td>ST7789 DC</td></tr>
+        <tr><td>TFT RST</td><td class="pin">PF12</td><td class="mono">GPIO out</td><td>ST7789 RST</td></tr>
+        <tr><td>SD CS</td><td class="pin">PF13</td><td class="mono">GPIO out</td><td>microSD CS</td></tr>
+        <tr><td>I2S BCLK</td><td class="pin">PE5</td><td class="mono">SAI1_A</td><td>PCM5102 BCK</td></tr>
+        <tr><td>I2S LRCLK</td><td class="pin">PE4</td><td class="mono">SAI1_A</td><td>PCM5102 LCK</td></tr>
+        <tr><td>I2S DATA</td><td class="pin">PE6</td><td class="mono">SAI1_A</td><td>PCM5102 DIN</td></tr>
+        <tr><td>ENC A</td><td class="pin">PF3</td><td class="mono">GPIO in, pull-up</td><td>PEC11R pin A</td></tr>
+        <tr><td>ENC B</td><td class="pin">PF5</td><td class="mono">GPIO in, pull-up</td><td>PEC11R pin B</td></tr>
+        <tr><td>ENC SW</td><td class="pin">PF10</td><td class="mono">GPIO in, pull-up</td><td>PEC11R switch</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note">
+    <span class="k">Before you wire anything</span>
+    <p>Open CubeMX, assign these, and let it show you conflicts and the exact ZIO/Arduino header positions for each. Ten minutes there beats an hour with a multimeter. Two board-level notes worth pre-empting: <b>PCM5102 needs its FMT/XSMT/FLT pins tied correctly</b> or it stays muted, and the <b>PAM8302 amp is mono</b> — sum L and R or feed it one channel, don't tie the DAC's two outputs together.</p>
+  </div>
+</section>
+
+<hr class="rule">
+
+<section>
+  <h2><span class="num">04 / TRAPS</span>Four H7 behaviours that will cost you a weekend</h2>
+  <p class="lede">The STM32H7 is faster than the F4 everyone learns on, and most of the extra speed comes from features that are invisible until they break your audio. These four account for the overwhelming majority of "it works, but only sometimes".</p>
+
+  <h3>1. The D-cache will corrupt your DMA buffers</h3>
+  <p>The Cortex-M7 has a data cache. DMA reads and writes main memory directly and knows nothing about it. So the CPU writes samples, they sit in cache, and the DMA transmits whatever stale bytes were in RAM — intermittent noise that seems to depend on unrelated code changes.</p>
+  <p>Three ways out, in order of how much sanity they preserve: put DMA buffers in <b>DTCM or a region marked non-cacheable via the MPU</b>; or call <code>SCB_CleanDCache_by_Addr()</code> after writing a TX buffer and <code>SCB_InvalidateDCache_by_Addr()</code> before reading an RX buffer, with 32-byte-aligned addresses and sizes; or disable the D-cache entirely while learning and turn it on later. The last option is a legitimate choice for a first project.</p>
+
+  <div class="note gotcha">
+    <span class="k">Related</span>
+    <p>DMA1 and DMA2 <b>cannot reach DTCM RAM</b> on the H7. If your buffer is in DTCM and the transfer silently does nothing, that's why — use AXI SRAM (or SRAM1–3) with the cache handled as above, and check the linker script to see where your buffers actually landed.</p>
+  </div>
+
+  <h3>2. Audio clocks are not just "divide the system clock"</h3>
+  <p>44.1 kHz is not a clean fraction of 480 MHz. The H7 has dedicated PLLs (PLL2/PLL3) for exactly this — configure one to give SAI a clock that divides to 44.1 kHz family rates, and note that 44.1/88.2/176.4 and 48/96/192 generally want <b>different PLL settings</b>. Getting close-but-not-exact shows up as pitch drift over a long track, or a slow tick as buffers slip. CubeMX will show you the actual resulting rate; make it show you the error.</p>
+
+  <h3>3. Preroll before you start the DMA</h3>
+  <p>The single most common cause of a click at the start of every track is starting playback before the buffer is meaningfully full. The <code>player</code> module in this repo enforces a 75% preroll and asks for a refill below 50% — those thresholds exist so a slow SD sector never reaches the DAC as a gap.</p>
+
+  <h3>4. Do the file I/O outside the audio interrupt</h3>
+  <p>The I2S half-transfer and full-transfer callbacks run in interrupt context. Reading from an SD card there — where a single sector read can block for milliseconds — will underrun. The correct shape is: <b>ISR consumes from the ring buffer only</b>; main loop notices <code>player_needs_refill()</code> and does the reading. That split is why the ring buffer is single-producer/single-consumer and lock-free.</p>
+</section>
+
+<hr class="rule">
+
+<section>
+  <h2><span class="num">05 / WRITTEN</span>What's already built and tested</h2>
+  <p class="lede">These modules are finished, compile with <code>-Wall -Wextra -Werror</code>, and pass 20,445 assertions plus an AddressSanitizer/UBSan run on a PC. None of them include a single STM32 header, so none of them were waiting on hardware.</p>
+
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>Module</th><th>What it does</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">ringbuf</td><td>Lock-free SPSC ring buffer — the SD-reader → I2S-DMA handoff, with zero-copy paths for DMA on both ends</td><td><span class="tag done">tested</span></td></tr>
+        <tr><td class="mono">wav</td><td>Streaming RIFF/WAVE parser: PCM 8/16/24/32-bit, float, WAVE_FORMAT_EXTENSIBLE, junk chunks, odd-size padding, frame-aligned seek</td><td><span class="tag done">tested</span></td></tr>
+        <tr><td class="mono">audio</td><td>Sample unpacking to Q1.31, logarithmic fixed-point volume, saturating gain, peak meter — no FPU use in the audio path</td><td><span class="tag done">tested</span></td></tr>
+        <tr><td class="mono">encoder</td><td>PEC11R quadrature decode (one detent per full cycle, bounce-immune) plus button debounce, click and long-press</td><td><span class="tag done">tested</span></td></tr>
+        <tr><td class="mono">ui_menu</td><td>Scrolling file-browser view model: minimal scrolling, no blank rows, wrap mode, safe on an empty or shrinking list</td><td><span class="tag done">tested</span></td></tr>
+        <tr><td class="mono">player</td><td>Playback state machine — preroll, refill policy, pause/resume without a gap, EOF, underrun counting, position and progress</td><td><span class="tag done">tested</span></td></tr>
+        <tr><td class="mono">st7789</td><td>240×240 TFT driver over an injected bus struct; init sequence, rotation offsets and window coordinates verified against a mock SPI</td><td><span class="tag done">tested</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>The design rule throughout: <b>hardware access goes through a struct of function pointers</b>. On the host the tests plug in a recorder and assert on the exact bytes emitted. On the Nucleo you plug in <code>HAL_SPI_Transmit</code> and friends. The driver code itself never changes, which means the display's init sequence and its 80-pixel rotation offset are already correct before the panel exists.</p>
+</section>
+
+<hr class="rule">
+
+<section>
+  <h2><span class="num">06 / NEXT</span>What's left to write</h2>
+  <p class="lede">Roughly in the order they become useful. The first three are still hardware-free and could be finished before delivery.</p>
+
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>Piece</th><th>Why</th><th>Needs hardware?</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">FLAC decoder integration</td><td>The stated priority for lossless playback. Port a small decoder, wrap it behind the same interface as <code>wav</code>, and test it on the host against reference files</td><td><span class="tag next">no</span></td></tr>
+        <tr><td class="mono">Bitmap font + text renderer</td><td>The menu needs to draw something. Pure pixel math — write it and render to a PPM file on the PC to eyeball it</td><td><span class="tag next">no</span></td></tr>
+        <tr><td class="mono">Playlist / directory model</td><td>Folder navigation, next/previous, shuffle, repeat. Test against a fake filesystem</td><td><span class="tag next">no</span></td></tr>
+        <tr><td class="mono">SD reader task</td><td>The loop that turns <code>player_needs_refill()</code> into <code>f_read()</code> calls into the ring buffer</td><td><span class="tag later">yes</span></td></tr>
+        <tr><td class="mono">SAI/I2S output layer</td><td>Double-buffered DMA, half/full callbacks, cache handling</td><td><span class="tag later">yes</span></td></tr>
+        <tr><td class="mono">Album art decode</td><td>JPEG at 240×240 is genuinely demanding — worth deferring until playback is solid</td><td><span class="tag later">yes</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note">
+    <span class="k">Highest-value next move</span>
+    <p>The <b>bitmap font renderer</b>. It's the last thing standing between the tested modules and a screen that shows an actual file list — and it's pure arithmetic, so it can be written and visually verified on a PC today.</p>
+  </div>
+</section>
+
+<footer>
+  <p>Pin assignments cross-checked against the Zephyr board definition for NUCLEO-H753ZI and ST's <a href="https://www.st.com/resource/en/user_manual/um2407-stm32h7-nucleo144-boards-mb1364-stmicroelectronics.pdf">UM2407 user manual</a>. Verify every pin in CubeMX before wiring — it flags conflicts that a table can't.</p>
+</footer>
+
+</div>

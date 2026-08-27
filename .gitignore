@@ -1,7 +1,31 @@
-build/
+# ---- portable core (host builds) ----
+firmware/build/
 *.o
-*.a
+*.d
+*.su
+*.ppm
+
+# ---- STM32CubeIDE / CubeMX ----
+cube/**/Debug/
+cube/**/Release/
 *.elf
-*.bin
 *.map
+*.list
+*.bin
+*.hex
+.settings/
+
+# CubeMX scratch. The .ioc IS committed — it is the pin configuration and the
+# most valuable file in the repo. .mxproject is regenerated noise.
+*.mxproject
+
+# ---- simulator (archived) ----
+sim/build/
+sim/dap_sim
+
+# ---- editors / OS ----
 .vscode/
+.idea/
+*.swp
+Thumbs.db
+.DS_Store
