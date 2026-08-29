@@ -21,7 +21,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include <stdio.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -129,10 +129,11 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-	uint32_t sysclk = HAL_RCC_GetSysClockFreq();
-	uint32_t hclk   = HAL_RCC_GetHCLKFreq();
-	uint32_t pclk1  = HAL_RCC_GetPCLK1Freq();
-	HAL_Delay(1000);
+	    printf("SYSCLK=%lu HCLK=%lu PCLK1=%lu\r\n",
+	           HAL_RCC_GetSysClockFreq(),
+	           HAL_RCC_GetHCLKFreq(),
+	           HAL_RCC_GetPCLK1Freq());
+	    HAL_Delay(1000);
   }
   /* USER CODE END 3 */
 }
@@ -445,7 +446,12 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+int _write(int file, char *ptr, int len)
+{
+  HAL_UART_Transmit(&huart3, (uint8_t *)ptr, len, HAL_MAX_DELAY);
+  return len;
 
+}
 /* USER CODE END 4 */
 
  /* MPU Configuration */
