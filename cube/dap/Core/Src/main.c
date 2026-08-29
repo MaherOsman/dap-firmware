@@ -129,6 +129,10 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+	uint32_t sysclk = HAL_RCC_GetSysClockFreq();
+	uint32_t hclk   = HAL_RCC_GetHCLKFreq();
+	uint32_t pclk1  = HAL_RCC_GetPCLK1Freq();
+	HAL_Delay(1000);
   }
   /* USER CODE END 3 */
 }
