@@ -52,6 +52,10 @@ UART_HandleTypeDef huart3;
 
 /* USER CODE BEGIN PV */
 
+#define TFT_W 240
+#define TFT_H 240
+#define RGB565_RED 0xF800
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -69,6 +73,80 @@ static void MX_TIM6_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+
+static void tft_cs_low(void)  { HAL_GPIO_WritePin(TFT_CS_GPIO_Port, TFT_CS_Pin, GPIO_PIN_RESET); }
+static void tft_cs_high(void) { HAL_GPIO_WritePin(TFT_CS_GPIO_Port, TFT_CS_Pin, GPIO_PIN_SET); }
+static void tft_dc_cmd(void)  { HAL_GPIO_WritePin(TFT_DC_GPIO_Port, TFT_DC_Pin, GPIO_PIN_RESET); }
+static void tft_dc_data(void) { HAL_GPIO_WritePin(TFT_DC_GPIO_Port, TFT_DC_Pin, GPIO_PIN_SET); }
+
+static void tft_cmd(uint8_t c)
+{
+  tft_dc_cmd();
+  tft_cs_low();
+  HAL_SPI_Transmit(&hspi1, &c, 1, HAL_MAX_DELAY);
+  tft_cs_high();
+}
+
+static void tft_data(const uint8_t *d, uint16_t n)
+{
+  tft_dc_data();
+  tft_cs_low();
+  HAL_SPI_Transmit(&hspi1, (uint8_t *)d, n, HAL_MAX_DELAY);
+  tft_cs_high();
+}
+
+static void tft_init(void)
+{
+  HAL_GPIO_WritePin(TFT_RST_GPIO_Port, TFT_RST_Pin, GPIO_PIN_SET);
+  HAL_Delay(10);
+  HAL_GPIO_WritePin(TFT_RST_GPIO_Port, TFT_RST_Pin, GPIO_PIN_RESET);
+  HAL_Delay(10);
+  HAL_GPIO_WritePin(TFT_RST_GPIO_Port, TFT_RST_Pin, GPIO_PIN_SET);
+  HAL_Delay(120);
+
+  uint8_t p;
+
+  tft_cmd(0x01); HAL_Delay(150);
+  tft_cmd(0x11); HAL_Delay(120);
+
+  p = 0x55; tft_cmd(0x3A); tft_data(&p, 1);
+  HAL_Delay(10);
+
+  p = 0x00; tft_cmd(0x36); tft_data(&p, 1);
+
+  tft_cmd(0x21); HAL_Delay(10);
+  tft_cmd(0x13); HAL_Delay(10);
+  tft_cmd(0x29); HAL_Delay(120);
+}
+
+static void tft_set_window(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1)
+{
+  uint8_t b[4];
+  b[0] = x0 >> 8; b[1] = x0 & 0xFF; b[2] = x1 >> 8; b[3] = x1 & 0xFF;
+  tft_cmd(0x2A); tft_data(b, 4);
+  b[0] = y0 >> 8; b[1] = y0 & 0xFF; b[2] = y1 >> 8; b[3] = y1 & 0xFF;
+  tft_cmd(0x2B); tft_data(b, 4);
+  tft_cmd(0x2C);
+}
+
+static void tft_fill(uint16_t color)
+{
+  static uint8_t line[TFT_W * 2];
+
+  for (int i = 0; i < TFT_W; i++) {
+    line[2 * i]     = color >> 8;
+    line[2 * i + 1] = color & 0xFF;
+  }
+
+  tft_set_window(0, 0, TFT_W - 1, TFT_H - 1);
+
+  tft_dc_data();
+  tft_cs_low();
+  for (int y = 0; y < TFT_H; y++) {
+    HAL_SPI_Transmit(&hspi1, line, sizeof line, HAL_MAX_DELAY);
+  }
+  tft_cs_high();
+}
 
 /* USER CODE END 0 */
 
@@ -110,6 +188,23 @@ int main(void)
   MX_USART3_UART_Init();
   MX_TIM6_Init();
   /* USER CODE BEGIN 2 */
+
+  printf("\r\n=== step 4: ST7789 ===\r\n");
+  HAL_GPIO_WritePin(SD_CS_GPIO_Port, SD_CS_Pin, GPIO_PIN_SET);
+  tft_cs_high();
+  printf("init...\r\n");
+  tft_init();
+  printf("init done, filling red (takes ~0.5s at 2MHz)\r\n");
+  tft_fill(RGB565_RED);
+  HAL_Delay(2000);
+  tft_fill(0x001F);   /* blue  */
+  HAL_Delay(2000);
+  tft_fill(0x07E0);   /* green */
+  HAL_Delay(2000);
+  tft_fill(0xFFFF);   /* white */
+  HAL_Delay(2000);
+  tft_fill(0x0000);   /* black */
+  printf("fill done\r\n");
 
   /* USER CODE END 2 */
 
