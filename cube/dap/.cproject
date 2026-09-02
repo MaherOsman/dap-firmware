@@ -45,6 +45,9 @@
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="com.st.stm32cube.ide.mcu.gnu.managedbuild.tool.c.compiler.option.includepaths.300457773" name="Include paths (-I)" superClass="com.st.stm32cube.ide.mcu.gnu.managedbuild.tool.c.compiler.option.includepaths" useByScannerDiscovery="false" valueType="includePath">
 									<listOptionValue builtIn="false" value="../Core/Inc"/>
+									<listOptionValue builtIn="false" value="C:/Users/maher/stm32/dap-firmware/firmware/src/core"/>
+									<listOptionValue builtIn="false" value="C:/Users/maher/stm32/dap-firmware/firmware/src/drivers"/>
+									<listOptionValue builtIn="false" value="C:/Users/maher/stm32/dap-firmware/firmware/src/ui"/>
 									<listOptionValue builtIn="false" value="../firmware/core"/>
 									<listOptionValue builtIn="false" value="../firmware/drivers"/>
 									<listOptionValue builtIn="false" value="../firmware/ui"/>
@@ -128,6 +131,12 @@
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="com.st.stm32cube.ide.mcu.gnu.managedbuild.tool.c.compiler.option.includepaths.75153228" name="Include paths (-I)" superClass="com.st.stm32cube.ide.mcu.gnu.managedbuild.tool.c.compiler.option.includepaths" useByScannerDiscovery="false" valueType="includePath">
 									<listOptionValue builtIn="false" value="../Core/Inc"/>
+									<listOptionValue builtIn="false" value="C:/Users/maher/stm32/dap-firmware/firmware/src/core"/>
+									<listOptionValue builtIn="false" value="C:/Users/maher/stm32/dap-firmware/firmware/src/drivers"/>
+									<listOptionValue builtIn="false" value="C:/Users/maher/stm32/dap-firmware/firmware/src/ui"/>
+									<listOptionValue builtIn="false" value="../firmware/core"/>
+									<listOptionValue builtIn="false" value="../firmware/drivers"/>
+									<listOptionValue builtIn="false" value="../firmware/ui"/>
 									<listOptionValue builtIn="false" value="../Drivers/STM32H7xx_HAL_Driver/Inc"/>
 									<listOptionValue builtIn="false" value="../Drivers/STM32H7xx_HAL_Driver/Inc/Legacy"/>
 									<listOptionValue builtIn="false" value="../Drivers/BSP/STM32H7xx_Nucleo"/>
