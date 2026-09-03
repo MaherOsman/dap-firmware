@@ -22,6 +22,8 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include <stdio.h>
+#include "gfx.h"
+#include "st7789.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -55,6 +57,10 @@ UART_HandleTypeDef huart3;
 #define TFT_W 240
 #define TFT_H 240
 #define RGB565_RED 0xF800
+static uint16_t fb_storage[240 * 240];
+static gfx_t    fb;
+static st7789_t tft;
+extern const st7789_bus_t platform_st7789_bus;
 
 /* USER CODE END PV */
 
@@ -189,22 +195,60 @@ int main(void)
   MX_TIM6_Init();
   /* USER CODE BEGIN 2 */
 
-  printf("\r\n=== step 4: ST7789 ===\r\n");
+  printf("\r\n=== step 5: gfx framebuffer ===\r\n");
+
+  /* SD shares SPI1 — keep its CS deasserted or it fights the display. */
   HAL_GPIO_WritePin(SD_CS_GPIO_Port, SD_CS_Pin, GPIO_PIN_SET);
   tft_cs_high();
+
+  /* --- step 4 colour cycle, kept for fallback ---
   printf("init...\r\n");
   tft_init();
   printf("init done, filling red (takes ~0.5s at 2MHz)\r\n");
   tft_fill(RGB565_RED);
   HAL_Delay(2000);
-  tft_fill(0x001F);   /* blue  */
+  tft_fill(0x001F);
   HAL_Delay(2000);
-  tft_fill(0x07E0);   /* green */
+  tft_fill(0x07E0);
   HAL_Delay(2000);
-  tft_fill(0xFFFF);   /* white */
+  tft_fill(0xFFFF);
   HAL_Delay(2000);
-  tft_fill(0x0000);   /* black */
+  tft_fill(0x0000);
   printf("fill done\r\n");
+  --- end step 4 --- */
+
+  printf("fb_storage @ %p (%u bytes)\r\n",
+         (void *)fb_storage, (unsigned)sizeof(fb_storage));
+
+  gfx_init(&fb, fb_storage, 240, 240);
+
+  /* Manual reset pulse, matching the known-good tft_init timing. */
+  HAL_GPIO_WritePin(TFT_RST_GPIO_Port, TFT_RST_Pin, GPIO_PIN_SET);
+  HAL_Delay(10);
+  HAL_GPIO_WritePin(TFT_RST_GPIO_Port, TFT_RST_Pin, GPIO_PIN_RESET);
+  HAL_Delay(10);
+  HAL_GPIO_WritePin(TFT_RST_GPIO_Port, TFT_RST_Pin, GPIO_PIN_SET);
+  HAL_Delay(120);
+
+  /* Same sequence as st7789_init, but with a CS pulse per command. */
+  tft_cmd(0x01); HAL_Delay(150);   /* SWRESET */
+  tft_cmd(0x11); HAL_Delay(120);   /* SLPOUT  */
+  uint8_t cm = 0x55;
+  tft_cmd(0x3A); tft_data(&cm, 1); HAL_Delay(10);   /* COLMOD */
+  uint8_t md = 0x00;
+  tft_cmd(0x36); tft_data(&md, 1);                  /* MADCTL */
+  tft_cmd(0x21); HAL_Delay(10);    /* INVON  */
+  tft_cmd(0x13); HAL_Delay(10);    /* NORON  */
+  tft_cmd(0x29); HAL_Delay(120);   /* DISPON */
+  printf("manual init done\r\n");
+
+  /* Tell the driver struct what it needs without letting it re-init. */
+  tft.bus = &platform_st7789_bus;
+  st7789_set_rotation(&tft, 0);
+
+  st7789_fill_screen(&tft, st7789_rgb(255, 0, 0));
+  printf("driver fill_screen done\r\n");
+
 
   /* USER CODE END 2 */
 
