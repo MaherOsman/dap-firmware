@@ -222,18 +222,10 @@ int main(void)
 
   gfx_init(&fb, fb_storage, 240, 240);
 
-  /* Manual reset pulse, matching the known-good tft_init timing. */
-  HAL_GPIO_WritePin(TFT_RST_GPIO_Port, TFT_RST_Pin, GPIO_PIN_SET);
-  HAL_Delay(10);
-  HAL_GPIO_WritePin(TFT_RST_GPIO_Port, TFT_RST_Pin, GPIO_PIN_RESET);
-  HAL_Delay(10);
-  HAL_GPIO_WritePin(TFT_RST_GPIO_Port, TFT_RST_Pin, GPIO_PIN_SET);
-  HAL_Delay(120);
-
   st7789_init(&tft, &platform_st7789_bus, 0);
   printf("st7789_init done\r\n");
 
-  st7789_fill_screen(&tft, st7789_rgb(0, 255, 0));
+  st7789_fill_screen(&tft, st7789_rgb(0, 0, 255));
   printf("driver fill_screen done\r\n");
 
 
