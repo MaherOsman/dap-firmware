@@ -230,23 +230,10 @@ int main(void)
   HAL_GPIO_WritePin(TFT_RST_GPIO_Port, TFT_RST_Pin, GPIO_PIN_SET);
   HAL_Delay(120);
 
-  /* Same sequence as st7789_init, but with a CS pulse per command. */
-  tft_cmd(0x01); HAL_Delay(150);   /* SWRESET */
-  tft_cmd(0x11); HAL_Delay(120);   /* SLPOUT  */
-  uint8_t cm = 0x55;
-  tft_cmd(0x3A); tft_data(&cm, 1); HAL_Delay(10);   /* COLMOD */
-  uint8_t md = 0x00;
-  tft_cmd(0x36); tft_data(&md, 1);                  /* MADCTL */
-  tft_cmd(0x21); HAL_Delay(10);    /* INVON  */
-  tft_cmd(0x13); HAL_Delay(10);    /* NORON  */
-  tft_cmd(0x29); HAL_Delay(120);   /* DISPON */
-  printf("manual init done\r\n");
+  st7789_init(&tft, &platform_st7789_bus, 0);
+  printf("st7789_init done\r\n");
 
-  /* Tell the driver struct what it needs without letting it re-init. */
-  tft.bus = &platform_st7789_bus;
-  st7789_set_rotation(&tft, 0);
-
-  st7789_fill_screen(&tft, st7789_rgb(255, 0, 0));
+  st7789_fill_screen(&tft, st7789_rgb(0, 255, 0));
   printf("driver fill_screen done\r\n");
 
 

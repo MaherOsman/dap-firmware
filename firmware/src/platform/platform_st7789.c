@@ -13,22 +13,33 @@
  */
 #include "main.h"
 #include "st7789.h"
+#include <stdio.h>
 
 extern SPI_HandleTypeDef hspi1;
 
-static void plat_write(void *ctx, const uint8_t *data, size_t len)
-{
-    (void)ctx;
-    HAL_SPI_Transmit(&hspi1, (uint8_t *)data, (uint16_t)len, HAL_MAX_DELAY);
-}
+/* Tracks whether DC currently selects data (true) or command (false).
+ * plat_write needs to know which, so it can pulse CS for commands only. */
+static bool dc_is_data = false;
 
 static void plat_set_dc(void *ctx, bool data)
 {
     (void)ctx;
+    dc_is_data = data;
     HAL_GPIO_WritePin(TFT_DC_GPIO_Port, TFT_DC_Pin,
                       data ? GPIO_PIN_SET : GPIO_PIN_RESET);
 }
 
+static void plat_write(void *ctx, const uint8_t *data, size_t len)
+{
+    (void)ctx;
+    /* This panel latches on the CS rising edge — both for commands and for
+     * pixel data. The portable driver holds CS across whole sequences, so
+     * the glue has to supply the edge itself, per transfer. */
+    HAL_GPIO_WritePin(TFT_CS_GPIO_Port, TFT_CS_Pin, GPIO_PIN_RESET);
+    HAL_SPI_Transmit(&hspi1, (uint8_t *)data, (uint16_t)len, HAL_MAX_DELAY);
+    HAL_GPIO_WritePin(TFT_CS_GPIO_Port, TFT_CS_Pin, GPIO_PIN_SET);
+
+}
 static void plat_set_cs(void *ctx, bool selected)
 {
     (void)ctx;
