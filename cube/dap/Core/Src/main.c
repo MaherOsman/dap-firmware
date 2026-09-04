@@ -26,6 +26,7 @@
 #include "st7789.h"
 #include "screen_library.h"
 #include "theme.h"
+#include "encoder.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -260,22 +261,28 @@ int main(void)
   st7789_write_pixels(&tft, fb_storage, 240u * 240u);
   tft.bus->set_cs(tft.bus->ctx, false);
 
-  tft.bus->set_cs(tft.bus->ctx, true);
-  st7789_set_window(&tft, 0, 0, 239, 239);
-  st7789_write_pixels(&tft, fb_storage, 240u * 240u);
-  tft.bus->set_cs(tft.bus->ctx, false);
+  encoder_t enc;
+  encoder_init(&enc,
+               HAL_GPIO_ReadPin(ENC_A_GPIO_Port,  ENC_A_Pin)  == GPIO_PIN_RESET,
+               HAL_GPIO_ReadPin(ENC_B_GPIO_Port,  ENC_B_Pin)  == GPIO_PIN_RESET,
+               HAL_GPIO_ReadPin(ENC_SW_GPIO_Port, ENC_SW_Pin) == GPIO_PIN_RESET);
 
-  /* --- temporary: encoder raw pin test, delete once wiring is confirmed --- */
-  printf("\r\n=== encoder raw pin test ===\r\n");
-  printf("turn the shaft, press the button, watch the bits\r\n");
+  printf("\r\n=== encoder decode test ===\r\n");
 
   while (1) {
-      int a  = HAL_GPIO_ReadPin(ENC_A_GPIO_Port,  ENC_A_Pin);
-      int b  = HAL_GPIO_ReadPin(ENC_B_GPIO_Port,  ENC_B_Pin);
-      int sw = HAL_GPIO_ReadPin(ENC_SW_GPIO_Port, ENC_SW_Pin);
+      bool a  = HAL_GPIO_ReadPin(ENC_A_GPIO_Port,  ENC_A_Pin)  == GPIO_PIN_RESET;
+      bool b  = HAL_GPIO_ReadPin(ENC_B_GPIO_Port,  ENC_B_Pin)  == GPIO_PIN_RESET;
+      bool sw = HAL_GPIO_ReadPin(ENC_SW_GPIO_Port, ENC_SW_Pin) == GPIO_PIN_RESET;
 
-      printf("A=%d B=%d SW=%d\r\n", a, b, sw);
-      HAL_Delay(100);
+      int step = encoder_update(&enc, a, b);
+      if (step != 0) {
+          printf("detent %+d\r\n", step);
+      }
+
+      btn_event_t ev = encoder_button(&enc, sw, HAL_GetTick());
+      if (ev != BTN_NONE) {
+          printf("button event %d\r\n", (int)ev);
+      }
   }
 
   /* USER CODE END 2 */
