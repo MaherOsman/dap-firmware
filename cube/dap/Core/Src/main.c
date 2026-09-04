@@ -260,6 +260,23 @@ int main(void)
   st7789_write_pixels(&tft, fb_storage, 240u * 240u);
   tft.bus->set_cs(tft.bus->ctx, false);
 
+  tft.bus->set_cs(tft.bus->ctx, true);
+  st7789_set_window(&tft, 0, 0, 239, 239);
+  st7789_write_pixels(&tft, fb_storage, 240u * 240u);
+  tft.bus->set_cs(tft.bus->ctx, false);
+
+  /* --- temporary: encoder raw pin test, delete once wiring is confirmed --- */
+  printf("\r\n=== encoder raw pin test ===\r\n");
+  printf("turn the shaft, press the button, watch the bits\r\n");
+
+  while (1) {
+      int a  = HAL_GPIO_ReadPin(ENC_A_GPIO_Port,  ENC_A_Pin);
+      int b  = HAL_GPIO_ReadPin(ENC_B_GPIO_Port,  ENC_B_Pin);
+      int sw = HAL_GPIO_ReadPin(ENC_SW_GPIO_Port, ENC_SW_Pin);
+
+      printf("A=%d B=%d SW=%d\r\n", a, b, sw);
+      HAL_Delay(100);
+  }
 
   /* USER CODE END 2 */
 
