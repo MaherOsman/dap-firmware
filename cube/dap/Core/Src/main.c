@@ -267,24 +267,35 @@ int main(void)
                HAL_GPIO_ReadPin(ENC_B_GPIO_Port,  ENC_B_Pin)  == GPIO_PIN_RESET,
                HAL_GPIO_ReadPin(ENC_SW_GPIO_Port, ENC_SW_Pin) == GPIO_PIN_RESET);
 
-  printf("\r\n=== encoder decode test ===\r\n");
+  printf("\r\n=== step 8: encoder drives the library screen ===\r\n");
 
-  while (1) {
-      bool a  = HAL_GPIO_ReadPin(ENC_A_GPIO_Port,  ENC_A_Pin)  == GPIO_PIN_RESET;
-      bool b  = HAL_GPIO_ReadPin(ENC_B_GPIO_Port,  ENC_B_Pin)  == GPIO_PIN_RESET;
-      bool sw = HAL_GPIO_ReadPin(ENC_SW_GPIO_Port, ENC_SW_Pin) == GPIO_PIN_RESET;
+    bool redraw = true;
 
-      int step = encoder_update(&enc, a, b);
-      if (step != 0) {
-          printf("detent %+d\r\n", step);
-      }
+    while (1) {
+        bool a = HAL_GPIO_ReadPin(ENC_A_GPIO_Port, ENC_A_Pin) == GPIO_PIN_RESET;
+        bool b = HAL_GPIO_ReadPin(ENC_B_GPIO_Port, ENC_B_Pin) == GPIO_PIN_RESET;
 
-      btn_event_t ev = encoder_button(&enc, sw, HAL_GetTick());
-      if (ev != BTN_NONE) {
-          printf("button event %d\r\n", (int)ev);
-      }
-  }
+        int step = encoder_update(&enc, a, b);
+        if (step != 0) {
+            selected += step;
+            if (selected < 0)   selected = 0;
+            if (selected > 13)  selected = 13;
+            lib_clamp_scroll(selected, 14, &scroll_top);
+            redraw = true;
+        }
 
+        if (redraw) {
+            screen_library_draw(&fb, &THEME_DARK, rows, 14, selected,
+                                scroll_top, "Artists", LIB_LEVEL_ARTIST);
+
+            tft.bus->set_cs(tft.bus->ctx, true);
+            st7789_set_window(&tft, 0, 0, 239, 239);
+            st7789_write_pixels(&tft, fb_storage, 240u * 240u);
+            tft.bus->set_cs(tft.bus->ctx, false);
+
+            redraw = false;
+        }
+    }
   /* USER CODE END 2 */
 
   /* Initialize leds */
