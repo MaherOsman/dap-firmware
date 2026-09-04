@@ -24,6 +24,8 @@
 #include <stdio.h>
 #include "gfx.h"
 #include "st7789.h"
+#include "screen_library.h"
+#include "theme.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -229,10 +231,29 @@ int main(void)
   printf("driver fill_screen done\r\n");
   HAL_Delay(1000);
 
-  gfx_clear(&fb, gfx_rgb(0, 0, 0));
-  gfx_text(&fb, &font_md, "Aygj Hello", 10, 10, gfx_rgb(255, 255, 255));
-  gfx_text(&fb, &font_lg, "Track Title", 10, 40, gfx_rgb(255, 255, 0));
-  gfx_text(&fb, &font_sm, "0:00 / 3:47", 10, 70, gfx_rgb(128, 128, 128));
+  static const lib_row_t rows[] = {
+      { "Aphex Twin",             true, false },
+      { "Autechre",               true, false },
+      { "Boards of Canada",       true, true  },
+      { "Bonobo",                 true, false },
+      { "Burial",                 true, false },
+      { "Caribou",                true, false },
+      { "Floating Points",        true, false },
+      { "Four Tet",               true, false },
+      { "Jon Hopkins",            true, false },
+      { "Kiasmos",                true, false },
+      { "Nils Frahm",             true, false },
+      { "Oneohtrix Point Never",  true, false },
+      { "Tim Hecker",             true, false },
+      { "Tycho",                  true, false },
+  };
+
+  int selected = 12;
+  int scroll_top = 0;
+  lib_clamp_scroll(selected, 14, &scroll_top);
+
+  screen_library_draw(&fb, &THEME_DARK, rows, 14, selected,
+                      scroll_top, "Artists", LIB_LEVEL_ARTIST);
 
   tft.bus->set_cs(tft.bus->ctx, true);
   st7789_set_window(&tft, 0, 0, 239, 239);
