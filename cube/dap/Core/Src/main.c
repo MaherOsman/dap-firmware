@@ -227,6 +227,17 @@ int main(void)
 
   st7789_fill_screen(&tft, st7789_rgb(0, 0, 255));
   printf("driver fill_screen done\r\n");
+  HAL_Delay(1000);
+
+  gfx_clear(&fb, gfx_rgb(0, 0, 0));
+  gfx_text(&fb, &font_md, "Aygj Hello", 10, 10, gfx_rgb(255, 255, 255));
+  gfx_text(&fb, &font_lg, "Track Title", 10, 40, gfx_rgb(255, 255, 0));
+  gfx_text(&fb, &font_sm, "0:00 / 3:47", 10, 70, gfx_rgb(128, 128, 128));
+
+  tft.bus->set_cs(tft.bus->ctx, true);
+  st7789_set_window(&tft, 0, 0, 239, 239);
+  st7789_write_pixels(&tft, fb_storage, 240u * 240u);
+  tft.bus->set_cs(tft.bus->ctx, false);
 
 
   /* USER CODE END 2 */
