@@ -22,6 +22,12 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include <stdio.h>
+#include "gfx.h"
+#include "st7789.h"
+#include "screen_library.h"
+#include "theme.h"
+#include "encoder.h"
+#include "library.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -52,6 +58,22 @@ UART_HandleTypeDef huart3;
 
 /* USER CODE BEGIN PV */
 
+#define TFT_W 240
+#define TFT_H 240
+#define RGB565_RED 0xF800
+static uint16_t fb_storage[240 * 240];
+static gfx_t    fb;
+static st7789_t tft;
+extern const st7789_bus_t platform_st7789_bus;
+
+static encoder_t enc;
+static volatile int enc_delta = 0;
+
+static library_t     g_lib;
+static lib_nav_t     g_nav;
+static lib_row_t     g_rows[LIB_MAX_ARTISTS];
+static volatile int  btn_event_pending = 0;
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -69,6 +91,7 @@ static void MX_TIM6_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+
 
 /* USER CODE END 0 */
 
@@ -110,6 +133,116 @@ int main(void)
   MX_USART3_UART_Init();
   MX_TIM6_Init();
   /* USER CODE BEGIN 2 */
+
+  printf("\r\n=== step 5: gfx framebuffer ===\r\n");
+
+  /* SD shares SPI1 — keep its CS deasserted or it fights the display. */
+  HAL_GPIO_WritePin(SD_CS_GPIO_Port, SD_CS_Pin, GPIO_PIN_SET);
+  HAL_GPIO_WritePin(TFT_CS_GPIO_Port, TFT_CS_Pin, GPIO_PIN_SET);
+
+
+
+  printf("fb_storage @ %p (%u bytes)\r\n",
+         (void *)fb_storage, (unsigned)sizeof(fb_storage));
+
+  gfx_init(&fb, fb_storage, 240, 240);
+
+  st7789_init(&tft, &platform_st7789_bus, 0);
+  printf("st7789_init done\r\n");
+
+  st7789_fill_screen(&tft, st7789_rgb(0, 0, 255));
+  printf("driver fill_screen done\r\n");
+  HAL_Delay(1000);
+
+  static const track_meta_t fake_tracks[] = {
+      { "CHON", "Grow", "Bubble Dream", "/chon/grow/01.flac", 1, 218 },
+      { "CHON", "Grow", "Perfect Pillow", "/chon/grow/02.flac", 2, 195 },
+      { "CHON", "Grow", "Anthem", "/chon/grow/03.flac", 3, 174 },
+      { "CHON", "Homey", "Sleepy Tea", "/chon/homey/01.flac", 1, 201 },
+      { "CHON", "Homey", "Waterslide", "/chon/homey/02.flac", 2, 227 },
+      { "CHON", "Homey", "Nayhoo", "/chon/homey/03.flac", 3, 233 },
+      { "Pinegrove", "Cardinal", "Old Friends", "/pine/card/01.flac", 1, 258 },
+      { "Pinegrove", "Cardinal", "Then Again", "/pine/card/02.flac", 2, 189 },
+      { "Pinegrove", "Cardinal", "Aphasia", "/pine/card/03.flac", 3, 265 },
+      { "Pinegrove", "Marigold", "Dotted Line", "/pine/mari/01.flac", 1, 243 },
+      { "Pinegrove", "Marigold", "Endless", "/pine/mari/02.flac", 2, 276 },
+      { "Nobuo Uematsu", "Final Fantasy VII", "Aerith's Theme", "/ff7/01.flac", 1, 296 },
+      { "Nobuo Uematsu", "Final Fantasy VII", "One-Winged Angel", "/ff7/02.flac", 2, 275 },
+      { "Nobuo Uematsu", "Final Fantasy VII", "Cosmo Canyon", "/ff7/03.flac", 3, 189 },
+      { "Nobuo Uematsu", "Final Fantasy VI", "Terra's Theme", "/ff6/01.flac", 1, 234 },
+      { "Nobuo Uematsu", "Final Fantasy VI", "Dancing Mad", "/ff6/02.flac", 2, 1043 },
+      { "Masayoshi Soken", "Final Fantasy XIV: Shadowbringers", "To the Edge", "/ff14/01.flac", 1, 312 },
+      { "Masayoshi Soken", "Final Fantasy XIV: Shadowbringers", "Tomorrow and Tomorrow", "/ff14/02.flac", 2, 268 },
+  };
+
+  library_build(&g_lib, fake_tracks, 18);
+  lib_nav_init(&g_nav);
+
+  printf("library: %d artists\r\n", g_lib.artist_count);
+
+
+  encoder_init(&enc,
+               HAL_GPIO_ReadPin(ENC_A_GPIO_Port,  ENC_A_Pin)  == GPIO_PIN_RESET,
+               HAL_GPIO_ReadPin(ENC_B_GPIO_Port,  ENC_B_Pin)  == GPIO_PIN_RESET,
+               HAL_GPIO_ReadPin(ENC_SW_GPIO_Port, ENC_SW_Pin) == GPIO_PIN_RESET);
+
+  HAL_TIM_Base_Start_IT(&htim6);
+
+  printf("\r\n=== step 8: encoder drives the library screen ===\r\n");
+
+  bool redraw = true;
+  int  playing = -1;
+
+  while (1) {
+      int delta;
+      int btn;
+
+      __disable_irq();
+      delta = enc_delta;
+      enc_delta = 0;
+      btn = btn_event_pending;
+      btn_event_pending = 0;
+      __enable_irq();
+
+      if (delta != 0) {
+          lib_move(&g_lib, &g_nav, delta);
+          redraw = true;
+      }
+
+      if (btn == 1) {
+          int track = lib_descend(&g_lib, &g_nav);
+          if (track >= 0) {
+              playing = track;
+              printf("play: %s\r\n", g_lib.tracks[track].title);
+          }
+          redraw = true;
+      } else if (btn == 2) {
+          lib_ascend(&g_lib, &g_nav);
+          redraw = true;
+      }
+
+      if (redraw) {
+          int n = lib_build_rows(&g_lib, &g_nav, g_rows,
+                                 LIB_MAX_ARTISTS, playing);
+
+          int *top = (g_nav.level == LIB_LEVEL_ARTIST) ? &g_nav.artist_top
+                   : (g_nav.level == LIB_LEVEL_ALBUM)  ? &g_nav.album_top
+                                                       : &g_nav.track_top;
+          int sel  = (g_nav.level == LIB_LEVEL_ARTIST) ? g_nav.artist_sel
+                   : (g_nav.level == LIB_LEVEL_ALBUM)  ? g_nav.album_sel
+                                                       : g_nav.track_sel;
+
+          screen_library_draw(&fb, &THEME_DARK, g_rows, n, sel, *top,
+                              lib_header(&g_lib, &g_nav), g_nav.level);
+
+          tft.bus->set_cs(tft.bus->ctx, true);
+          st7789_set_window(&tft, 0, 0, 239, 239);
+          st7789_write_pixels(&tft, fb_storage, 240u * 240u);
+          tft.bus->set_cs(tft.bus->ctx, false);
+
+          redraw = false;
+      }
+  }
 
   /* USER CODE END 2 */
 
@@ -256,7 +389,7 @@ static void MX_SPI1_Init(void)
   hspi1.Init.CLKPolarity = SPI_POLARITY_LOW;
   hspi1.Init.CLKPhase = SPI_PHASE_1EDGE;
   hspi1.Init.NSS = SPI_NSS_SOFT;
-  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_64;
+  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_8;
   hspi1.Init.FirstBit = SPI_FIRSTBIT_MSB;
   hspi1.Init.TIMode = SPI_TIMODE_DISABLE;
   hspi1.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
@@ -413,11 +546,11 @@ static void MX_GPIO_Init(void)
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(TFT_DC_GPIO_Port, TFT_DC_Pin, GPIO_PIN_RESET);
 
-  /*Configure GPIO pins : ENC_A_Pin ENC_B_Pin ENC_SW_Pin */
-  GPIO_InitStruct.Pin = ENC_A_Pin|ENC_B_Pin|ENC_SW_Pin;
+  /*Configure GPIO pin : ENC_SW_Pin */
+  GPIO_InitStruct.Pin = ENC_SW_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_PULLUP;
-  HAL_GPIO_Init(GPIOF, &GPIO_InitStruct);
+  HAL_GPIO_Init(ENC_SW_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pin : TFT_RST_Pin */
   GPIO_InitStruct.Pin = TFT_RST_Pin;
@@ -440,6 +573,12 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
   HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
 
+  /*Configure GPIO pins : ENC_A_Pin ENC_B_Pin */
+  GPIO_InitStruct.Pin = ENC_A_Pin|ENC_B_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
+  HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
+
   /* USER CODE BEGIN MX_GPIO_Init_2 */
 
   /* USER CODE END MX_GPIO_Init_2 */
@@ -451,6 +590,27 @@ int _write(int file, char *ptr, int len)
   HAL_UART_Transmit(&huart3, (uint8_t *)ptr, len, HAL_MAX_DELAY);
   return len;
 
+}
+
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+  if (htim->Instance == TIM6) {
+      bool a = HAL_GPIO_ReadPin(ENC_A_GPIO_Port, ENC_A_Pin) == GPIO_PIN_RESET;
+      bool b = HAL_GPIO_ReadPin(ENC_B_GPIO_Port, ENC_B_Pin) == GPIO_PIN_RESET;
+
+      int step = encoder_update(&enc, a, b);
+      if (step != 0) {
+          enc_delta += step;
+      }
+
+      bool sw = HAL_GPIO_ReadPin(ENC_SW_GPIO_Port, ENC_SW_Pin) == GPIO_PIN_RESET;
+      btn_event_t ev = encoder_button(&enc, sw, HAL_GetTick());
+      if (ev == BTN_CLICK) {
+          btn_event_pending = 1;      /* descend */
+      } else if (ev == BTN_LONG_PRESS) {
+          btn_event_pending = 2;      /* back */
+      }
+  }
 }
 /* USER CODE END 4 */
 

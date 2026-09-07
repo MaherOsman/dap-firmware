@@ -59,10 +59,6 @@ void Error_Handler(void);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
-#define ENC_A_Pin GPIO_PIN_3
-#define ENC_A_GPIO_Port GPIOF
-#define ENC_B_Pin GPIO_PIN_5
-#define ENC_B_GPIO_Port GPIOF
 #define ENC_SW_Pin GPIO_PIN_10
 #define ENC_SW_GPIO_Port GPIOF
 #define TFT_RST_Pin GPIO_PIN_12
@@ -73,6 +69,10 @@ void Error_Handler(void);
 #define TFT_CS_GPIO_Port GPIOD
 #define TFT_DC_Pin GPIO_PIN_15
 #define TFT_DC_GPIO_Port GPIOD
+#define ENC_A_Pin GPIO_PIN_0
+#define ENC_A_GPIO_Port GPIOD
+#define ENC_B_Pin GPIO_PIN_1
+#define ENC_B_GPIO_Port GPIOD
 
 /* USER CODE BEGIN Private defines */
 
