@@ -27,6 +27,7 @@
 #include "screen_library.h"
 #include "theme.h"
 #include "encoder.h"
+#include "library.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -67,6 +68,11 @@ extern const st7789_bus_t platform_st7789_bus;
 
 static encoder_t enc;
 static volatile int enc_delta = 0;
+
+static library_t     g_lib;
+static lib_nav_t     g_nav;
+static lib_row_t     g_rows[LIB_MAX_ARTISTS];
+static volatile int  btn_event_pending = 0;
 
 /* USER CODE END PV */
 
@@ -148,26 +154,32 @@ int main(void)
   printf("driver fill_screen done\r\n");
   HAL_Delay(1000);
 
-  static const lib_row_t rows[] = {
-      { "Aphex Twin",             true, false },
-      { "Autechre",               true, false },
-      { "Boards of Canada",       true, true  },
-      { "Bonobo",                 true, false },
-      { "Burial",                 true, false },
-      { "Caribou",                true, false },
-      { "Floating Points",        true, false },
-      { "Four Tet",               true, false },
-      { "Jon Hopkins",            true, false },
-      { "Kiasmos",                true, false },
-      { "Nils Frahm",             true, false },
-      { "Oneohtrix Point Never",  true, false },
-      { "Tim Hecker",             true, false },
-      { "Tycho",                  true, false },
+  static const track_meta_t fake_tracks[] = {
+      { "CHON", "Grow", "Bubble Dream", "/chon/grow/01.flac", 1, 218 },
+      { "CHON", "Grow", "Perfect Pillow", "/chon/grow/02.flac", 2, 195 },
+      { "CHON", "Grow", "Anthem", "/chon/grow/03.flac", 3, 174 },
+      { "CHON", "Homey", "Sleepy Tea", "/chon/homey/01.flac", 1, 201 },
+      { "CHON", "Homey", "Waterslide", "/chon/homey/02.flac", 2, 227 },
+      { "CHON", "Homey", "Nayhoo", "/chon/homey/03.flac", 3, 233 },
+      { "Pinegrove", "Cardinal", "Old Friends", "/pine/card/01.flac", 1, 258 },
+      { "Pinegrove", "Cardinal", "Then Again", "/pine/card/02.flac", 2, 189 },
+      { "Pinegrove", "Cardinal", "Aphasia", "/pine/card/03.flac", 3, 265 },
+      { "Pinegrove", "Marigold", "Dotted Line", "/pine/mari/01.flac", 1, 243 },
+      { "Pinegrove", "Marigold", "Endless", "/pine/mari/02.flac", 2, 276 },
+      { "Nobuo Uematsu", "Final Fantasy VII", "Aerith's Theme", "/ff7/01.flac", 1, 296 },
+      { "Nobuo Uematsu", "Final Fantasy VII", "One-Winged Angel", "/ff7/02.flac", 2, 275 },
+      { "Nobuo Uematsu", "Final Fantasy VII", "Cosmo Canyon", "/ff7/03.flac", 3, 189 },
+      { "Nobuo Uematsu", "Final Fantasy VI", "Terra's Theme", "/ff6/01.flac", 1, 234 },
+      { "Nobuo Uematsu", "Final Fantasy VI", "Dancing Mad", "/ff6/02.flac", 2, 1043 },
+      { "Masayoshi Soken", "Final Fantasy XIV: Shadowbringers", "To the Edge", "/ff14/01.flac", 1, 312 },
+      { "Masayoshi Soken", "Final Fantasy XIV: Shadowbringers", "Tomorrow and Tomorrow", "/ff14/02.flac", 2, 268 },
   };
 
-  int selected = 12;
-  int scroll_top = 0;
-  lib_clamp_scroll(selected, 14, &scroll_top);
+  library_build(&g_lib, fake_tracks, 18);
+  lib_nav_init(&g_nav);
+
+  printf("library: %d artists\r\n", g_lib.artist_count);
+
 
   encoder_init(&enc,
                HAL_GPIO_ReadPin(ENC_A_GPIO_Port,  ENC_A_Pin)  == GPIO_PIN_RESET,
@@ -178,36 +190,60 @@ int main(void)
 
   printf("\r\n=== step 8: encoder drives the library screen ===\r\n");
 
-    bool redraw = true;
+  bool redraw = true;
+  int  playing = -1;
 
-    while (1) {
-        int delta;
+  while (1) {
+      int delta;
+      int btn;
 
-        __disable_irq();
-        delta = enc_delta;
-        enc_delta = 0;
-        __enable_irq();
+      __disable_irq();
+      delta = enc_delta;
+      enc_delta = 0;
+      btn = btn_event_pending;
+      btn_event_pending = 0;
+      __enable_irq();
 
-        if (delta != 0) {
-            selected += delta;
-            if (selected < 0)   selected = 0;
-            if (selected > 13)  selected = 13;
-            lib_clamp_scroll(selected, 14, &scroll_top);
-            redraw = true;
-        }
+      if (delta != 0) {
+          lib_move(&g_lib, &g_nav, delta);
+          redraw = true;
+      }
 
-        if (redraw) {
-            screen_library_draw(&fb, &THEME_DARK, rows, 14, selected,
-                                scroll_top, "Artists", LIB_LEVEL_ARTIST);
+      if (btn == 1) {
+          int track = lib_descend(&g_lib, &g_nav);
+          if (track >= 0) {
+              playing = track;
+              printf("play: %s\r\n", g_lib.tracks[track].title);
+          }
+          redraw = true;
+      } else if (btn == 2) {
+          lib_ascend(&g_lib, &g_nav);
+          redraw = true;
+      }
 
-            tft.bus->set_cs(tft.bus->ctx, true);
-            st7789_set_window(&tft, 0, 0, 239, 239);
-            st7789_write_pixels(&tft, fb_storage, 240u * 240u);
-            tft.bus->set_cs(tft.bus->ctx, false);
+      if (redraw) {
+          int n = lib_build_rows(&g_lib, &g_nav, g_rows,
+                                 LIB_MAX_ARTISTS, playing);
 
-            redraw = false;
-        }
-    }
+          int *top = (g_nav.level == LIB_LEVEL_ARTIST) ? &g_nav.artist_top
+                   : (g_nav.level == LIB_LEVEL_ALBUM)  ? &g_nav.album_top
+                                                       : &g_nav.track_top;
+          int sel  = (g_nav.level == LIB_LEVEL_ARTIST) ? g_nav.artist_sel
+                   : (g_nav.level == LIB_LEVEL_ALBUM)  ? g_nav.album_sel
+                                                       : g_nav.track_sel;
+
+          screen_library_draw(&fb, &THEME_DARK, g_rows, n, sel, *top,
+                              lib_header(&g_lib, &g_nav), g_nav.level);
+
+          tft.bus->set_cs(tft.bus->ctx, true);
+          st7789_set_window(&tft, 0, 0, 239, 239);
+          st7789_write_pixels(&tft, fb_storage, 240u * 240u);
+          tft.bus->set_cs(tft.bus->ctx, false);
+
+          redraw = false;
+      }
+  }
+
   /* USER CODE END 2 */
 
   /* Initialize leds */
@@ -565,6 +601,14 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
       int step = encoder_update(&enc, a, b);
       if (step != 0) {
           enc_delta += step;
+      }
+
+      bool sw = HAL_GPIO_ReadPin(ENC_SW_GPIO_Port, ENC_SW_Pin) == GPIO_PIN_RESET;
+      btn_event_t ev = encoder_button(&enc, sw, HAL_GetTick());
+      if (ev == BTN_CLICK) {
+          btn_event_pending = 1;      /* descend */
+      } else if (ev == BTN_LONG_PRESS) {
+          btn_event_pending = 2;      /* back */
       }
   }
 }
