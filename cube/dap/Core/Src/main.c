@@ -65,6 +65,9 @@ static gfx_t    fb;
 static st7789_t tft;
 extern const st7789_bus_t platform_st7789_bus;
 
+static encoder_t enc;
+static volatile int enc_delta = 0;
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -166,31 +169,27 @@ int main(void)
   int scroll_top = 0;
   lib_clamp_scroll(selected, 14, &scroll_top);
 
-  screen_library_draw(&fb, &THEME_DARK, rows, 14, selected,
-                      scroll_top, "Artists", LIB_LEVEL_ARTIST);
-
-  tft.bus->set_cs(tft.bus->ctx, true);
-  st7789_set_window(&tft, 0, 0, 239, 239);
-  st7789_write_pixels(&tft, fb_storage, 240u * 240u);
-  tft.bus->set_cs(tft.bus->ctx, false);
-
-  encoder_t enc;
   encoder_init(&enc,
                HAL_GPIO_ReadPin(ENC_A_GPIO_Port,  ENC_A_Pin)  == GPIO_PIN_RESET,
                HAL_GPIO_ReadPin(ENC_B_GPIO_Port,  ENC_B_Pin)  == GPIO_PIN_RESET,
                HAL_GPIO_ReadPin(ENC_SW_GPIO_Port, ENC_SW_Pin) == GPIO_PIN_RESET);
+
+  HAL_TIM_Base_Start_IT(&htim6);
 
   printf("\r\n=== step 8: encoder drives the library screen ===\r\n");
 
     bool redraw = true;
 
     while (1) {
-        bool a = HAL_GPIO_ReadPin(ENC_A_GPIO_Port, ENC_A_Pin) == GPIO_PIN_RESET;
-        bool b = HAL_GPIO_ReadPin(ENC_B_GPIO_Port, ENC_B_Pin) == GPIO_PIN_RESET;
+        int delta;
 
-        int step = encoder_update(&enc, a, b);
-        if (step != 0) {
-            selected += step;
+        __disable_irq();
+        delta = enc_delta;
+        enc_delta = 0;
+        __enable_irq();
+
+        if (delta != 0) {
+            selected += delta;
             if (selected < 0)   selected = 0;
             if (selected > 13)  selected = 13;
             lib_clamp_scroll(selected, 14, &scroll_top);
@@ -555,6 +554,19 @@ int _write(int file, char *ptr, int len)
   HAL_UART_Transmit(&huart3, (uint8_t *)ptr, len, HAL_MAX_DELAY);
   return len;
 
+}
+
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+  if (htim->Instance == TIM6) {
+      bool a = HAL_GPIO_ReadPin(ENC_A_GPIO_Port, ENC_A_Pin) == GPIO_PIN_RESET;
+      bool b = HAL_GPIO_ReadPin(ENC_B_GPIO_Port, ENC_B_Pin) == GPIO_PIN_RESET;
+
+      int step = encoder_update(&enc, a, b);
+      if (step != 0) {
+          enc_delta += step;
+      }
+  }
 }
 /* USER CODE END 4 */
 

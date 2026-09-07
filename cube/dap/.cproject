@@ -48,9 +48,6 @@
 									<listOptionValue builtIn="false" value="C:/Users/maher/stm32/dap-firmware/firmware/src/core"/>
 									<listOptionValue builtIn="false" value="C:/Users/maher/stm32/dap-firmware/firmware/src/drivers"/>
 									<listOptionValue builtIn="false" value="C:/Users/maher/stm32/dap-firmware/firmware/src/ui"/>
-									<listOptionValue builtIn="false" value="../firmware/core"/>
-									<listOptionValue builtIn="false" value="../firmware/drivers"/>
-									<listOptionValue builtIn="false" value="../firmware/ui"/>
 									<listOptionValue builtIn="false" value="../Drivers/STM32H7xx_HAL_Driver/Inc"/>
 									<listOptionValue builtIn="false" value="../Drivers/STM32H7xx_HAL_Driver/Inc/Legacy"/>
 									<listOptionValue builtIn="false" value="../Drivers/BSP/STM32H7xx_Nucleo"/>
@@ -134,9 +131,6 @@
 									<listOptionValue builtIn="false" value="C:/Users/maher/stm32/dap-firmware/firmware/src/core"/>
 									<listOptionValue builtIn="false" value="C:/Users/maher/stm32/dap-firmware/firmware/src/drivers"/>
 									<listOptionValue builtIn="false" value="C:/Users/maher/stm32/dap-firmware/firmware/src/ui"/>
-									<listOptionValue builtIn="false" value="../firmware/core"/>
-									<listOptionValue builtIn="false" value="../firmware/drivers"/>
-									<listOptionValue builtIn="false" value="../firmware/ui"/>
 									<listOptionValue builtIn="false" value="../Drivers/STM32H7xx_HAL_Driver/Inc"/>
 									<listOptionValue builtIn="false" value="../Drivers/STM32H7xx_HAL_Driver/Inc/Legacy"/>
 									<listOptionValue builtIn="false" value="../Drivers/BSP/STM32H7xx_Nucleo"/>
