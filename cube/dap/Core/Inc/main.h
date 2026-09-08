@@ -63,8 +63,8 @@ void Error_Handler(void);
 #define ENC_SW_GPIO_Port GPIOF
 #define TFT_RST_Pin GPIO_PIN_12
 #define TFT_RST_GPIO_Port GPIOF
-#define SD_CS_Pin GPIO_PIN_13
-#define SD_CS_GPIO_Port GPIOF
+#define SD_CS_Pin GPIO_PIN_11
+#define SD_CS_GPIO_Port GPIOD
 #define TFT_CS_Pin GPIO_PIN_14
 #define TFT_CS_GPIO_Port GPIOD
 #define TFT_DC_Pin GPIO_PIN_15
