@@ -35,12 +35,15 @@
 /* Includes ------------------------------------------------------------------*/
 #include <string.h>
 #include "ff_gen_drv.h"
+#include "sd_spi.h"
 
 /* Private typedef -----------------------------------------------------------*/
 /* Private define ------------------------------------------------------------*/
 
 /* Private variables ---------------------------------------------------------*/
 /* Disk status */
+extern const sd_bus_t platform_sd_bus;
+static sd_t sd_card;
 static volatile DSTATUS Stat = STA_NOINIT;
 
 /* USER CODE END DECL */
@@ -81,7 +84,12 @@ DSTATUS USER_initialize (
 )
 {
   /* USER CODE BEGIN INIT */
-    Stat = STA_NOINIT;
+    (void)pdrv;
+    if (sd_init(&sd_card, &platform_sd_bus) == SD_OK) {
+        Stat = 0;                 /* clear STA_NOINIT */
+    } else {
+        Stat = STA_NOINIT;
+    }
     return Stat;
   /* USER CODE END INIT */
 }
@@ -96,7 +104,7 @@ DSTATUS USER_status (
 )
 {
   /* USER CODE BEGIN STATUS */
-    Stat = STA_NOINIT;
+    (void)pdrv;
     return Stat;
   /* USER CODE END STATUS */
 }
@@ -117,7 +125,11 @@ DRESULT USER_read (
 )
 {
   /* USER CODE BEGIN READ */
-    return RES_OK;
+    (void)pdrv;
+    if (Stat & STA_NOINIT) return RES_NOTRDY;
+
+    sd_err_t e = sd_read_blocks(&sd_card, (uint32_t)sector, buff, (uint32_t)count);
+    return (e == SD_OK) ? RES_OK : RES_ERROR;
   /* USER CODE END READ */
 }
 
@@ -139,7 +151,8 @@ DRESULT USER_write (
 {
   /* USER CODE BEGIN WRITE */
   /* USER CODE HERE */
-    return RES_OK;
+    (void)pdrv; (void)buff; (void)sector; (void)count;
+    return RES_WRPRT;             /* read-only: playback never writes */
   /* USER CODE END WRITE */
 }
 #endif /* _USE_WRITE == 1 */
@@ -159,8 +172,21 @@ DRESULT USER_ioctl (
 )
 {
   /* USER CODE BEGIN IOCTL */
-    DRESULT res = RES_ERROR;
-    return res;
+    (void)pdrv;
+    if (Stat & STA_NOINIT) return RES_NOTRDY;
+
+    switch (cmd) {
+    case CTRL_SYNC:
+        return RES_OK;            /* nothing buffered, nothing to flush */
+    case GET_SECTOR_SIZE:
+        *(WORD *)buff = SD_BLOCK_SIZE;
+        return RES_OK;
+    case GET_BLOCK_SIZE:
+        *(DWORD *)buff = 1;       /* erase block size in sectors */
+        return RES_OK;
+    default:
+        return RES_PARERR;
+    }
   /* USER CODE END IOCTL */
 }
 #endif /* _USE_IOCTL == 1 */

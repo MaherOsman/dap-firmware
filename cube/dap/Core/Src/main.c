@@ -278,43 +278,29 @@ int main(void)
       HAL_GPIO_WritePin(SD_CS_GPIO_Port, SD_CS_Pin, GPIO_PIN_SET);
   }
 
+  /* ---- FatFs mount and directory listing ---- */
+  {
+      FRESULT fr = f_mount(&USERFatFS, USERPath, 1);   /* 1 = mount now */
+      printf("f_mount: %d\r\n", fr);
 
-  /* ---- SD card bring-up test ---- */
-  extern const sd_bus_t platform_sd_bus;
-  static sd_t sd;
+      if (fr == FR_OK) {
+          DIR dir;
+          static FILINFO fno;
 
-  printf("\r\n--- SD init ---\r\n");
-  sd_err_t sd_status = sd_init(&sd, &platform_sd_bus);
-  printf("sd_init: %s\r\n", sd_err_str(sd_status));
+          fr = f_opendir(&dir, "/");
+          printf("f_opendir /: %d\r\n", fr);
 
-  if (sd_status == SD_OK) {
-      const char *type = "?";
-      switch (sd.type) {
-      case SD_CARD_V1:       type = "SDSC v1";        break;
-      case SD_CARD_V2_BYTE:  type = "SDSC v2";        break;
-      case SD_CARD_V2_BLOCK: type = "SDHC/SDXC";      break;
-      default:               type = "unknown";        break;
-      }
-      printf("  type: %s, block addressed: %s\r\n",
-             type, sd.block_addressed ? "yes" : "no");
-  } else {
-      printf("  last R1: 0x%02X\r\n", sd.last_r1);
-  }
-
-  /* ---- read sector 0 ---- */
-  if (sd_status == SD_OK) {
-      static uint8_t sector[SD_BLOCK_SIZE];
-      sd_err_t r = sd_read_blocks(&sd, 0, sector, 1);
-      printf("read LBA 0: %s\r\n", sd_err_str(r));
-
-      if (r == SD_OK) {
-          printf("  first 16: ");
-          for (int i = 0; i < 16; i++) printf("%02X ", sector[i]);
-          printf("\r\n");
-          printf("  sig @510: %02X %02X (want 55 AA)\r\n",
-                 sector[510], sector[511]);
+          while (fr == FR_OK) {
+              fr = f_readdir(&dir, &fno);
+              if (fr != FR_OK || fno.fname[0] == 0) break;
+              printf("  %s %s\r\n",
+                     (fno.fattrib & AM_DIR) ? "[DIR] " : "      ",
+                     fno.fname);
+          }
+          f_closedir(&dir);
       }
   }
+
 
   bool redraw = true;
   int  playing = -1;
