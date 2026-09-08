@@ -280,3 +280,90 @@ done:
     sd->bus.set_speed(sd->bus.ctx, SD_SPEED_FULL);
     return result;
 }
+
+/* ------------------------------------------------------------------ */
+/* Block reads                                                         */
+/* ------------------------------------------------------------------ */
+
+#define TOKEN_START_BLOCK   0xFEu   /* precedes every 512-byte payload */
+#define TOKEN_ERROR_MASK    0xF0u   /* error tokens have high nibble 0 */
+#define READ_TOKEN_TIMEOUT_MS  200u /* spec NAC max is 100 ms          */
+#define BUSY_TIMEOUT_MS      500u
+
+/* Waits for the data start token. The card sends 0xFF while it is
+ * still fetching from flash -- that wait is normal and can be tens of
+ * milliseconds on a large card. Anything that is neither 0xFF nor 0xFE
+ * is an error token and means the read has already failed. */
+static sd_err_t wait_data_token(sd_t *sd) {
+    uint32_t start = sd->bus.millis(sd->bus.ctx);
+    for (;;) {
+        uint8_t t = rx_byte(sd);
+        if (t == TOKEN_START_BLOCK) return SD_OK;
+        if (t != 0xFF) return SD_ERR_READ_TOKEN;  /* error token       */
+
+        if (sd->bus.millis(sd->bus.ctx) - start > READ_TOKEN_TIMEOUT_MS) {
+            return SD_ERR_READ_TOKEN;
+        }
+    }
+}
+
+/* Reads one 512-byte payload plus its 2-byte CRC (discarded -- CRC is
+ * off in SPI mode by default and the card still sends the field). */
+static sd_err_t read_data_block(sd_t *sd, uint8_t *dst) {
+    sd_err_t e = wait_data_token(sd);
+    if (e != SD_OK) return e;
+
+    if (!rx(sd, dst, SD_BLOCK_SIZE)) return SD_ERR_BUS;
+
+    uint8_t crc[2];
+    if (!rx(sd, crc, 2)) return SD_ERR_BUS;
+    return SD_OK;
+}
+
+/* After CMD12 the card holds DO low while it finishes up. */
+static sd_err_t wait_not_busy(sd_t *sd) {
+    uint32_t start = sd->bus.millis(sd->bus.ctx);
+    while (rx_byte(sd) != 0xFF) {
+        if (sd->bus.millis(sd->bus.ctx) - start > BUSY_TIMEOUT_MS) {
+            return SD_ERR_TIMEOUT;
+        }
+    }
+    return SD_OK;
+}
+
+sd_err_t sd_read_blocks(sd_t *sd, uint32_t lba, uint8_t *dst, uint32_t count) {
+    if (sd == NULL || dst == NULL || count == 0) return SD_ERR_PARAM;
+    if (!sd->initialised)                        return SD_ERR_NOT_INIT;
+
+    /* SDSC addresses by byte, SDHC/SDXC by block. Getting this wrong
+     * does not error -- you silently read the wrong part of the card,
+     * which FatFs reports as "no filesystem". */
+    uint32_t addr = sd->block_addressed ? lba : (lba * SD_BLOCK_SIZE);
+
+    sd_err_t result;
+
+    if (count == 1) {
+        cs_low(sd);
+        if (send_cmd(sd, CMD17, addr) != 0x00) { result = SD_ERR_READ_CMD; goto out; }
+        result = read_data_block(sd, dst);
+        goto out;
+    }
+
+    cs_low(sd);
+    if (send_cmd(sd, CMD18, addr) != 0x00) { result = SD_ERR_READ_CMD; goto out; }
+
+    result = SD_OK;
+    for (uint32_t i = 0; i < count; i++) {
+        result = read_data_block(sd, dst + (i * SD_BLOCK_SIZE));
+        if (result != SD_OK) break;
+    }
+
+    /* CMD12 must be sent even if a block failed -- the card is still
+     * streaming and will keep driving the bus otherwise. */
+    (void)send_cmd(sd, CMD12, 0);
+    if (wait_not_busy(sd) != SD_OK && result == SD_OK) result = SD_ERR_TIMEOUT;
+
+out:
+    cs_high(sd);
+    return result;
+}
