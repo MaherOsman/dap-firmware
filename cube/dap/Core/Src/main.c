@@ -29,6 +29,8 @@
 #include "theme.h"
 #include "encoder.h"
 #include "library.h"
+#include "sd_spi.h"
+#include <string.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -191,6 +193,112 @@ int main(void)
   HAL_TIM_Base_Start_IT(&htim6);
 
   printf("\r\n=== step 8: encoder drives the library screen ===\r\n");
+
+  /* --- CMD0 at display speed, no set_speed call --- */
+  {
+      uint8_t ff[10]; memset(ff, 0xFF, sizeof ff);
+      uint8_t got[10];
+      uint8_t cmd0[6] = {0x40, 0x00, 0x00, 0x00, 0x00, 0x95};
+
+      HAL_GPIO_WritePin(SD_CS_GPIO_Port, SD_CS_Pin, GPIO_PIN_SET);
+      HAL_SPI_TransmitReceive(&hspi1, ff, got, 10, 1000);
+
+      HAL_GPIO_WritePin(SD_CS_GPIO_Port, SD_CS_Pin, GPIO_PIN_RESET);
+      HAL_SPI_TransmitReceive(&hspi1, cmd0, got, 6, 1000);
+      HAL_SPI_TransmitReceive(&hspi1, ff, got, 10, 1000);
+      HAL_GPIO_WritePin(SD_CS_GPIO_Port, SD_CS_Pin, GPIO_PIN_SET);
+
+      printf("CMD0 @24MHz: ");
+      for (int i = 0; i < 10; i++) printf("%02X ", got[i]);
+      printf("\r\n");
+  }
+
+  /* --- MISO sanity check --- */
+  {
+      uint8_t ff[4] = {0xFF, 0xFF, 0xFF, 0xFF};
+      uint8_t got[4] = {0};
+
+      /* CS high: card deselected, should not drive MISO. */
+      HAL_GPIO_WritePin(SD_CS_GPIO_Port, SD_CS_Pin, GPIO_PIN_SET);
+      HAL_SPI_TransmitReceive(&hspi1, ff, got, 4, 1000);
+      printf("MISO idle (CS high): %02X %02X %02X %02X\r\n",
+             got[0], got[1], got[2], got[3]);
+
+      /* CS low: card selected. Still expect 0xFF, but now the card is
+       * at least meant to be listening. */
+      HAL_GPIO_WritePin(SD_CS_GPIO_Port, SD_CS_Pin, GPIO_PIN_RESET);
+      HAL_SPI_TransmitReceive(&hspi1, ff, got, 4, 1000);
+      HAL_GPIO_WritePin(SD_CS_GPIO_Port, SD_CS_Pin, GPIO_PIN_SET);
+      printf("MISO (CS low):       %02X %02X %02X %02X\r\n",
+             got[0], got[1], got[2], got[3]);
+  }
+
+  HAL_GPIO_WritePin(SD_CS_GPIO_Port, SD_CS_Pin, GPIO_PIN_RESET);
+  HAL_Delay(1);
+  int cs_low_rd  = HAL_GPIO_ReadPin(SD_CS_GPIO_Port, SD_CS_Pin);
+  HAL_GPIO_WritePin(SD_CS_GPIO_Port, SD_CS_Pin, GPIO_PIN_SET);
+  HAL_Delay(1);
+  int cs_high_rd = HAL_GPIO_ReadPin(SD_CS_GPIO_Port, SD_CS_Pin);
+  printf("PF13 readback: low=%d high=%d (want 0 then 1)\r\n",
+         cs_low_rd, cs_high_rd);
+
+  /* --- CS toggle test: watch PF13 with a meter or LED --- */
+  printf("toggling SD_CS for 3 s...\r\n");
+  for (int i = 0; i < 300; i++) {
+      HAL_GPIO_TogglePin(SD_CS_GPIO_Port, SD_CS_Pin);
+      HAL_Delay(10);
+  }
+  HAL_GPIO_WritePin(SD_CS_GPIO_Port, SD_CS_Pin, GPIO_PIN_SET);
+
+  /* --- raw CMD0 trace at init speed --- */
+  {
+      extern const sd_bus_t platform_sd_bus;
+      platform_sd_bus.set_speed(NULL, SD_SPEED_INIT);
+
+      uint8_t ff[10]; memset(ff, 0xFF, sizeof ff);
+      uint8_t got[10];
+      uint8_t cmd0[6] = {0x40, 0x00, 0x00, 0x00, 0x00, 0x95};
+
+      /* 80 clocks with CS high */
+      HAL_GPIO_WritePin(SD_CS_GPIO_Port, SD_CS_Pin, GPIO_PIN_SET);
+      HAL_SPI_TransmitReceive(&hspi1, ff, got, 10, 1000);
+
+      /* CMD0 with CS low */
+      HAL_GPIO_WritePin(SD_CS_GPIO_Port, SD_CS_Pin, GPIO_PIN_RESET);
+      HAL_SPI_TransmitReceive(&hspi1, ff, got, 1, 1000);
+      HAL_SPI_TransmitReceive(&hspi1, cmd0, got, 6, 1000);
+      printf("during frame: %02X %02X %02X %02X %02X %02X\r\n",
+             got[0], got[1], got[2], got[3], got[4], got[5]);
+
+      HAL_SPI_TransmitReceive(&hspi1, ff, got, 10, 1000);
+      printf("after  frame: ");
+      for (int i = 0; i < 10; i++) printf("%02X ", got[i]);
+      printf("\r\n");
+
+      HAL_GPIO_WritePin(SD_CS_GPIO_Port, SD_CS_Pin, GPIO_PIN_SET);
+  }
+
+  /* ---- SD card bring-up test ---- */
+  extern const sd_bus_t platform_sd_bus;
+  static sd_t sd;
+
+  printf("\r\n--- SD init ---\r\n");
+  sd_err_t sd_status = sd_init(&sd, &platform_sd_bus);
+  printf("sd_init: %s\r\n", sd_err_str(sd_status));
+
+  if (sd_status == SD_OK) {
+      const char *type = "?";
+      switch (sd.type) {
+      case SD_CARD_V1:       type = "SDSC v1";        break;
+      case SD_CARD_V2_BYTE:  type = "SDSC v2";        break;
+      case SD_CARD_V2_BLOCK: type = "SDHC/SDXC";      break;
+      default:               type = "unknown";        break;
+      }
+      printf("  type: %s, block addressed: %s\r\n",
+             type, sd.block_addressed ? "yes" : "no");
+  } else {
+      printf("  last R1: 0x%02X\r\n", sd.last_r1);
+  }
 
   bool redraw = true;
   int  playing = -1;
@@ -411,6 +519,12 @@ static void MX_SPI1_Init(void)
     Error_Handler();
   }
   /* USER CODE BEGIN SPI1_Init 2 */
+
+  /* Keep the SPI pins driven while the peripheral is disabled.
+   * plat_sd_set_speed leaves SPI1 disabled between transfers (CFG1 is
+   * only writable when disabled), and without this the pins are
+   * released and SCK does not idle cleanly. */
+  SET_BIT(hspi1.Instance->CFG2, SPI_CFG2_AFCNTR);
 
   /* USER CODE END SPI1_Init 2 */
 

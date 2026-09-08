@@ -71,8 +71,10 @@ static void plat_sd_set_speed(void *ctx, sd_speed_t speed)
      * simply does not change. Disable, modify, re-enable. */
     __HAL_SPI_DISABLE(&hspi1);
     MODIFY_REG(hspi1.Instance->CFG1, SPI_CFG1_MBR, mbr);
-    __HAL_SPI_ENABLE(&hspi1);
-
+    /* Deliberately left DISABLED. On H7, HAL_SPI_* writes CR2.TSIZE,
+        * which is only writable while the peripheral is disabled — HAL
+        * enables it itself per transfer. Re-enabling here makes every
+        * subsequent HAL transfer silently time out. */
     /* Keep the handle's cached value in step, or a later HAL_SPI_Init()
      * would quietly undo this. */
     hspi1.Init.BaudRatePrescaler = mbr;

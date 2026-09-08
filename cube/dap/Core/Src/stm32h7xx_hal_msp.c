@@ -72,6 +72,7 @@ void HAL_MspInit(void)
 
   /* USER CODE BEGIN MspInit 1 */
 
+
   /* USER CODE END MspInit 1 */
 }
 
@@ -125,6 +126,16 @@ void HAL_SPI_MspInit(SPI_HandleTypeDef* hspi)
     HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
     /* USER CODE BEGIN SPI1_MspInit 1 */
+
+    /* MISO needs a pull-up: neither the SD card (when deselected) nor
+         * the ST7789 breakout drives this line. Also raises the slew rate,
+         * since CubeMX sets LOW which is marginal at 24 MHz. */
+        GPIO_InitStruct.Pin       = GPIO_PIN_6;
+        GPIO_InitStruct.Mode      = GPIO_MODE_AF_PP;
+        GPIO_InitStruct.Pull      = GPIO_PULLUP;
+        GPIO_InitStruct.Speed     = GPIO_SPEED_FREQ_VERY_HIGH;
+        GPIO_InitStruct.Alternate = GPIO_AF5_SPI1;
+        HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
     /* USER CODE END SPI1_MspInit 1 */
 
