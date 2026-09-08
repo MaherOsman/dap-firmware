@@ -278,6 +278,7 @@ int main(void)
       HAL_GPIO_WritePin(SD_CS_GPIO_Port, SD_CS_Pin, GPIO_PIN_SET);
   }
 
+
   /* ---- SD card bring-up test ---- */
   extern const sd_bus_t platform_sd_bus;
   static sd_t sd;
@@ -298,6 +299,21 @@ int main(void)
              type, sd.block_addressed ? "yes" : "no");
   } else {
       printf("  last R1: 0x%02X\r\n", sd.last_r1);
+  }
+
+  /* ---- read sector 0 ---- */
+  if (sd_status == SD_OK) {
+      static uint8_t sector[SD_BLOCK_SIZE];
+      sd_err_t r = sd_read_blocks(&sd, 0, sector, 1);
+      printf("read LBA 0: %s\r\n", sd_err_str(r));
+
+      if (r == SD_OK) {
+          printf("  first 16: ");
+          for (int i = 0; i < 16; i++) printf("%02X ", sector[i]);
+          printf("\r\n");
+          printf("  sig @510: %02X %02X (want 55 AA)\r\n",
+                 sector[510], sector[511]);
+      }
   }
 
   bool redraw = true;
