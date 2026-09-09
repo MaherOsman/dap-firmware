@@ -77,6 +77,12 @@ static lib_nav_t     g_nav;
 static lib_row_t     g_rows[LIB_MAX_ARTISTS];
 static volatile int  btn_event_pending = 0;
 
+static DIR      probe_dir;
+static FILINFO  probe_fno;
+static FIL      probe_fil;
+static char     probe_path[300];
+static uint8_t  probe_buf[64];
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -89,6 +95,9 @@ static void MX_SPI1_Init(void);
 static void MX_USART3_UART_Init(void);
 static void MX_TIM6_Init(void);
 /* USER CODE BEGIN PFP */
+
+void flac_probe(void);
+void flac_throughput(void);
 
 /* USER CODE END PFP */
 
@@ -298,6 +307,8 @@ int main(void)
                      fno.fname);
           }
           f_closedir(&dir);
+          flac_probe();
+          flac_throughput();
       }
   }
 
@@ -722,6 +733,98 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
           btn_event_pending = 2;      /* back */
       }
   }
+}
+
+static int ends_with_flac(const char *s)
+{
+  size_t n = strlen(s);
+  if (n < 5) return 0;
+  const char *e = s + n - 5;
+  return e[0] == '.'
+      && (e[1] == 'f' || e[1] == 'F')
+      && (e[2] == 'l' || e[2] == 'L')
+      && (e[3] == 'a' || e[3] == 'A')
+      && (e[4] == 'c' || e[4] == 'C');
+}
+
+static void hexdump(const uint8_t *p, unsigned n)
+{
+  for (unsigned i = 0; i < n; i += 16) {
+    printf("%04X: ", i);
+    for (unsigned j = 0; j < 16; j++) {
+      if (i + j < n) printf("%02X ", p[i + j]);
+      else           printf("   ");
+    }
+    printf(" |");
+    for (unsigned j = 0; j < 16 && i + j < n; j++) {
+      uint8_t c = p[i + j];
+      printf("%c", (c >= 32 && c < 127) ? (char)c : '.');
+    }
+    printf("|\r\n");
+  }
+}
+
+void flac_probe(void)
+{
+  FRESULT fr;
+  UINT br = 0;
+
+  fr = f_opendir(&probe_dir, "/Music/Chon/Chon - Grow");
+  printf("f_opendir(/Music/Chon/Chon - Grow) -> %d\r\n", (int)fr);
+  if (fr != FR_OK) return;
+
+  probe_path[0] = '\0';
+  for (;;) {
+    fr = f_readdir(&probe_dir, &probe_fno);
+    if (fr != FR_OK) { printf("f_readdir -> %d\r\n", (int)fr); break; }
+    if (probe_fno.fname[0] == '\0') break;          /* end of directory */
+    if (probe_fno.fattrib & AM_DIR) { printf("  dir : %s\r\n", probe_fno.fname); continue; }
+    printf("  file: %s (%lu bytes)\r\n",
+           probe_fno.fname, (unsigned long)probe_fno.fsize);
+    if (probe_path[0] == '\0' && ends_with_flac(probe_fno.fname))
+      snprintf(probe_path, sizeof probe_path, "/Music/Chon/Chon - Grow/%s", probe_fno.fname);
+  }
+  f_closedir(&probe_dir);
+
+  if (probe_path[0] == '\0') { printf("no .flac in /Music\r\n"); return; }
+  printf("opening: %s\r\n", probe_path);
+
+  fr = f_open(&probe_fil, probe_path, FA_READ);
+  printf("f_open -> %d\r\n", (int)fr);
+  if (fr != FR_OK) return;
+
+  memset(probe_buf, 0xA5, sizeof probe_buf);        /* poison, see below */
+  fr = f_read(&probe_fil, probe_buf, sizeof probe_buf, &br);
+  printf("f_read -> %d, br=%u\r\n", (int)fr, (unsigned)br);
+  if (fr == FR_OK) hexdump(probe_buf, br);
+
+  f_close(&probe_fil);
+}
+
+void flac_throughput(void)
+{
+  static uint8_t chunk[4096];
+  FRESULT fr;
+  UINT br;
+  uint32_t total = 0, sum = 0, t0;
+
+  fr = f_open(&probe_fil, probe_path, FA_READ);
+  if (fr != FR_OK) { printf("f_open -> %d\r\n", (int)fr); return; }
+
+  t0 = HAL_GetTick();
+  for (;;) {
+    fr = f_read(&probe_fil, chunk, sizeof chunk, &br);
+    if (fr != FR_OK) { printf("f_read -> %d at %lu\r\n", (int)fr, (unsigned long)total); break; }
+    if (br == 0) break;
+    for (UINT i = 0; i < br; i++) sum += chunk[i];
+    total += br;
+  }
+  uint32_t ms = HAL_GetTick() - t0;
+
+  printf("read %lu bytes in %lu ms", (unsigned long)total, (unsigned long)ms);
+  if (ms) printf(" = %lu KB/s", (unsigned long)(total / ms));
+  printf(", checksum %08lX\r\n", (unsigned long)sum);
+  f_close(&probe_fil);
 }
 /* USER CODE END 4 */
 
