@@ -98,6 +98,7 @@ static void MX_TIM6_Init(void);
 
 void flac_probe(void);
 void flac_throughput(void);
+void sd_multiblock_test(void);
 
 /* USER CODE END PFP */
 
@@ -307,6 +308,7 @@ int main(void)
                      fno.fname);
           }
           f_closedir(&dir);
+          sd_multiblock_test();
           flac_probe();
           flac_throughput();
       }
@@ -764,6 +766,30 @@ static void hexdump(const uint8_t *p, unsigned n)
   }
 }
 
+void sd_multiblock_test(void)
+{
+  static uint8_t buf1[512];
+  static uint8_t buf8[8 * 512];
+  extern sd_t *user_diskio_get_sd(void);
+  sd_t *sd = user_diskio_get_sd();
+  sd_err_t e;
+
+  e = sd_read_blocks(sd, 0, buf1, 1);
+  printf("read 1 block  -> %d\r\n", (int)e);
+
+  e = sd_read_blocks(sd, 0, buf8, 2);
+  printf("read 2 blocks -> %d\r\n", (int)e);
+
+  e = sd_read_blocks(sd, 0, buf8, 8);
+  printf("read 8 blocks -> %d\r\n", (int)e);
+
+  printf("first 8 bytes: %02X %02X %02X %02X %02X %02X %02X %02X\r\n",
+         buf8[0], buf8[1], buf8[2], buf8[3],
+         buf8[4], buf8[5], buf8[6], buf8[7]);
+  printf("block 2 start: %02X %02X %02X %02X\r\n",
+         buf8[512], buf8[513], buf8[514], buf8[515]);
+}
+
 void flac_probe(void)
 {
   FRESULT fr;
@@ -803,7 +829,7 @@ void flac_probe(void)
 
 void flac_throughput(void)
 {
-  static uint8_t chunk[512];
+  static uint8_t chunk[4096];
   FRESULT fr;
   UINT br;
   uint32_t total = 0, sum = 0, t0;
@@ -826,6 +852,7 @@ void flac_throughput(void)
   printf(", checksum %08lX\r\n", (unsigned long)sum);
   f_close(&probe_fil);
 }
+
 /* USER CODE END 4 */
 
  /* MPU Configuration */

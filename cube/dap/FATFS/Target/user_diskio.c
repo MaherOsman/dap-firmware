@@ -44,6 +44,7 @@
 /* Disk status */
 extern const sd_bus_t platform_sd_bus;
 static sd_t sd_card;
+sd_t *user_diskio_get_sd(void) { return &sd_card; }
 static volatile DSTATUS Stat = STA_NOINIT;
 
 /* USER CODE END DECL */
