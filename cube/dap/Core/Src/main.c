@@ -29,7 +29,6 @@
 #include "theme.h"
 #include "encoder.h"
 #include "library.h"
-#include "sd_spi.h"
 #include <string.h>
 /* USER CODE END Includes */
 
@@ -97,8 +96,6 @@ static void MX_TIM6_Init(void);
 /* USER CODE BEGIN PFP */
 
 void flac_probe(void);
-void flac_throughput(void);
-void sd_multiblock_test(void);
 
 /* USER CODE END PFP */
 
@@ -148,251 +145,125 @@ int main(void)
   MX_FATFS_Init();
   /* USER CODE BEGIN 2 */
 
-  printf("\r\n=== step 5: gfx framebuffer ===\r\n");
+  printf("\r\n=== DAP ===\r\n");
 
-  /* SD shares SPI1 — keep its CS deasserted or it fights the display. */
-  HAL_GPIO_WritePin(SD_CS_GPIO_Port, SD_CS_Pin, GPIO_PIN_SET);
-  HAL_GPIO_WritePin(TFT_CS_GPIO_Port, TFT_CS_Pin, GPIO_PIN_SET);
+    /* SD shares SPI1 — keep its CS deasserted or it fights the display. */
+    HAL_GPIO_WritePin(SD_CS_GPIO_Port, SD_CS_Pin, GPIO_PIN_SET);
+    HAL_GPIO_WritePin(TFT_CS_GPIO_Port, TFT_CS_Pin, GPIO_PIN_SET);
 
+    gfx_init(&fb, fb_storage, 240, 240);
+    st7789_init(&tft, &platform_st7789_bus, 0);
 
+    /* Green flash proves the panel is alive. The panel retains its last
+     * image across resets, so this must be a colour no screen uses. */
+    st7789_fill_screen(&tft, st7789_rgb(0, 255, 0));
+    HAL_Delay(200);
 
-  printf("fb_storage @ %p (%u bytes)\r\n",
-         (void *)fb_storage, (unsigned)sizeof(fb_storage));
+    static const track_meta_t fake_tracks[] = {
+        { "CHON", "Grow", "Bubble Dream", "/chon/grow/01.flac", 1, 218 },
+        { "CHON", "Grow", "Perfect Pillow", "/chon/grow/02.flac", 2, 195 },
+        { "CHON", "Grow", "Anthem", "/chon/grow/03.flac", 3, 174 },
+        { "CHON", "Homey", "Sleepy Tea", "/chon/homey/01.flac", 1, 201 },
+        { "CHON", "Homey", "Waterslide", "/chon/homey/02.flac", 2, 227 },
+        { "CHON", "Homey", "Nayhoo", "/chon/homey/03.flac", 3, 233 },
+        { "Pinegrove", "Cardinal", "Old Friends", "/pine/card/01.flac", 1, 258 },
+        { "Pinegrove", "Cardinal", "Then Again", "/pine/card/02.flac", 2, 189 },
+        { "Pinegrove", "Cardinal", "Aphasia", "/pine/card/03.flac", 3, 265 },
+        { "Pinegrove", "Marigold", "Dotted Line", "/pine/mari/01.flac", 1, 243 },
+        { "Pinegrove", "Marigold", "Endless", "/pine/mari/02.flac", 2, 276 },
+        { "Nobuo Uematsu", "Final Fantasy VII", "Aerith's Theme", "/ff7/01.flac", 1, 296 },
+        { "Nobuo Uematsu", "Final Fantasy VII", "One-Winged Angel", "/ff7/02.flac", 2, 275 },
+        { "Nobuo Uematsu", "Final Fantasy VII", "Cosmo Canyon", "/ff7/03.flac", 3, 189 },
+        { "Nobuo Uematsu", "Final Fantasy VI", "Terra's Theme", "/ff6/01.flac", 1, 234 },
+        { "Nobuo Uematsu", "Final Fantasy VI", "Dancing Mad", "/ff6/02.flac", 2, 1043 },
+        { "Masayoshi Soken", "Final Fantasy XIV: Shadowbringers", "To the Edge", "/ff14/01.flac", 1, 312 },
+        { "Masayoshi Soken", "Final Fantasy XIV: Shadowbringers", "Tomorrow and Tomorrow", "/ff14/02.flac", 2, 268 },
+    };
 
-  gfx_init(&fb, fb_storage, 240, 240);
+    library_build(&g_lib, fake_tracks, 18);
+    lib_nav_init(&g_nav);
 
-  st7789_init(&tft, &platform_st7789_bus, 0);
-  printf("st7789_init done\r\n");
+    encoder_init(&enc,
+                 HAL_GPIO_ReadPin(ENC_A_GPIO_Port,  ENC_A_Pin)  == GPIO_PIN_RESET,
+                 HAL_GPIO_ReadPin(ENC_B_GPIO_Port,  ENC_B_Pin)  == GPIO_PIN_RESET,
+                 HAL_GPIO_ReadPin(ENC_SW_GPIO_Port, ENC_SW_Pin) == GPIO_PIN_RESET);
 
-  st7789_fill_screen(&tft, st7789_rgb(0, 255, 0));
-  printf("driver fill_screen done\r\n");
-  HAL_Delay(1000);
+    HAL_TIM_Base_Start_IT(&htim6);
 
-  static const track_meta_t fake_tracks[] = {
-      { "CHON", "Grow", "Bubble Dream", "/chon/grow/01.flac", 1, 218 },
-      { "CHON", "Grow", "Perfect Pillow", "/chon/grow/02.flac", 2, 195 },
-      { "CHON", "Grow", "Anthem", "/chon/grow/03.flac", 3, 174 },
-      { "CHON", "Homey", "Sleepy Tea", "/chon/homey/01.flac", 1, 201 },
-      { "CHON", "Homey", "Waterslide", "/chon/homey/02.flac", 2, 227 },
-      { "CHON", "Homey", "Nayhoo", "/chon/homey/03.flac", 3, 233 },
-      { "Pinegrove", "Cardinal", "Old Friends", "/pine/card/01.flac", 1, 258 },
-      { "Pinegrove", "Cardinal", "Then Again", "/pine/card/02.flac", 2, 189 },
-      { "Pinegrove", "Cardinal", "Aphasia", "/pine/card/03.flac", 3, 265 },
-      { "Pinegrove", "Marigold", "Dotted Line", "/pine/mari/01.flac", 1, 243 },
-      { "Pinegrove", "Marigold", "Endless", "/pine/mari/02.flac", 2, 276 },
-      { "Nobuo Uematsu", "Final Fantasy VII", "Aerith's Theme", "/ff7/01.flac", 1, 296 },
-      { "Nobuo Uematsu", "Final Fantasy VII", "One-Winged Angel", "/ff7/02.flac", 2, 275 },
-      { "Nobuo Uematsu", "Final Fantasy VII", "Cosmo Canyon", "/ff7/03.flac", 3, 189 },
-      { "Nobuo Uematsu", "Final Fantasy VI", "Terra's Theme", "/ff6/01.flac", 1, 234 },
-      { "Nobuo Uematsu", "Final Fantasy VI", "Dancing Mad", "/ff6/02.flac", 2, 1043 },
-      { "Masayoshi Soken", "Final Fantasy XIV: Shadowbringers", "To the Edge", "/ff14/01.flac", 1, 312 },
-      { "Masayoshi Soken", "Final Fantasy XIV: Shadowbringers", "Tomorrow and Tomorrow", "/ff14/02.flac", 2, 268 },
-  };
-
-  library_build(&g_lib, fake_tracks, 18);
-  lib_nav_init(&g_nav);
-
-  printf("library: %d artists\r\n", g_lib.artist_count);
-
-
-  encoder_init(&enc,
-               HAL_GPIO_ReadPin(ENC_A_GPIO_Port,  ENC_A_Pin)  == GPIO_PIN_RESET,
-               HAL_GPIO_ReadPin(ENC_B_GPIO_Port,  ENC_B_Pin)  == GPIO_PIN_RESET,
-               HAL_GPIO_ReadPin(ENC_SW_GPIO_Port, ENC_SW_Pin) == GPIO_PIN_RESET);
-
-  HAL_TIM_Base_Start_IT(&htim6);
-
-  printf("\r\n=== step 8: encoder drives the library screen ===\r\n");
-
-  /* --- CMD0 at display speed, no set_speed call --- */
-  {
-      uint8_t ff[10]; memset(ff, 0xFF, sizeof ff);
-      uint8_t got[10];
-      uint8_t cmd0[6] = {0x40, 0x00, 0x00, 0x00, 0x00, 0x95};
-
-      HAL_GPIO_WritePin(SD_CS_GPIO_Port, SD_CS_Pin, GPIO_PIN_SET);
-      HAL_SPI_TransmitReceive(&hspi1, ff, got, 10, 1000);
-
-      HAL_GPIO_WritePin(SD_CS_GPIO_Port, SD_CS_Pin, GPIO_PIN_RESET);
-      HAL_SPI_TransmitReceive(&hspi1, cmd0, got, 6, 1000);
-      HAL_SPI_TransmitReceive(&hspi1, ff, got, 10, 1000);
-      HAL_GPIO_WritePin(SD_CS_GPIO_Port, SD_CS_Pin, GPIO_PIN_SET);
-
-      printf("CMD0 @24MHz: ");
-      for (int i = 0; i < 10; i++) printf("%02X ", got[i]);
-      printf("\r\n");
-  }
-
-  /* --- MISO sanity check --- */
-  {
-      uint8_t ff[4] = {0xFF, 0xFF, 0xFF, 0xFF};
-      uint8_t got[4] = {0};
-
-      /* CS high: card deselected, should not drive MISO. */
-      HAL_GPIO_WritePin(SD_CS_GPIO_Port, SD_CS_Pin, GPIO_PIN_SET);
-      HAL_SPI_TransmitReceive(&hspi1, ff, got, 4, 1000);
-      printf("MISO idle (CS high): %02X %02X %02X %02X\r\n",
-             got[0], got[1], got[2], got[3]);
-
-      /* CS low: card selected. Still expect 0xFF, but now the card is
-       * at least meant to be listening. */
-      HAL_GPIO_WritePin(SD_CS_GPIO_Port, SD_CS_Pin, GPIO_PIN_RESET);
-      HAL_SPI_TransmitReceive(&hspi1, ff, got, 4, 1000);
-      HAL_GPIO_WritePin(SD_CS_GPIO_Port, SD_CS_Pin, GPIO_PIN_SET);
-      printf("MISO (CS low):       %02X %02X %02X %02X\r\n",
-             got[0], got[1], got[2], got[3]);
-  }
-
-  HAL_GPIO_WritePin(SD_CS_GPIO_Port, SD_CS_Pin, GPIO_PIN_RESET);
-  HAL_Delay(1);
-  int cs_low_rd  = HAL_GPIO_ReadPin(SD_CS_GPIO_Port, SD_CS_Pin);
-  HAL_GPIO_WritePin(SD_CS_GPIO_Port, SD_CS_Pin, GPIO_PIN_SET);
-  HAL_Delay(1);
-  int cs_high_rd = HAL_GPIO_ReadPin(SD_CS_GPIO_Port, SD_CS_Pin);
-  printf("PF13 readback: low=%d high=%d (want 0 then 1)\r\n",
-         cs_low_rd, cs_high_rd);
-
-  /* --- CS toggle test: watch PF13 with a meter or LED --- */
-  printf("toggling SD_CS for 3 s...\r\n");
-  for (int i = 0; i < 300; i++) {
-      HAL_GPIO_TogglePin(SD_CS_GPIO_Port, SD_CS_Pin);
-      HAL_Delay(10);
-  }
-  HAL_GPIO_WritePin(SD_CS_GPIO_Port, SD_CS_Pin, GPIO_PIN_SET);
-
-  /* --- raw CMD0 trace at init speed --- */
-  {
-      extern const sd_bus_t platform_sd_bus;
-      platform_sd_bus.set_speed(NULL, SD_SPEED_INIT);
-
-      uint8_t ff[10]; memset(ff, 0xFF, sizeof ff);
-      uint8_t got[10];
-      uint8_t cmd0[6] = {0x40, 0x00, 0x00, 0x00, 0x00, 0x95};
-
-      /* 80 clocks with CS high */
-      HAL_GPIO_WritePin(SD_CS_GPIO_Port, SD_CS_Pin, GPIO_PIN_SET);
-      HAL_SPI_TransmitReceive(&hspi1, ff, got, 10, 1000);
-
-      /* CMD0 with CS low */
-      HAL_GPIO_WritePin(SD_CS_GPIO_Port, SD_CS_Pin, GPIO_PIN_RESET);
-      HAL_SPI_TransmitReceive(&hspi1, ff, got, 1, 1000);
-      HAL_SPI_TransmitReceive(&hspi1, cmd0, got, 6, 1000);
-      printf("during frame: %02X %02X %02X %02X %02X %02X\r\n",
-             got[0], got[1], got[2], got[3], got[4], got[5]);
-
-      HAL_SPI_TransmitReceive(&hspi1, ff, got, 10, 1000);
-      printf("after  frame: ");
-      for (int i = 0; i < 10; i++) printf("%02X ", got[i]);
-      printf("\r\n");
-
-      HAL_GPIO_WritePin(SD_CS_GPIO_Port, SD_CS_Pin, GPIO_PIN_SET);
-  }
-
-  /* ---- FatFs mount and directory listing ---- */
-  {
-      FRESULT fr = f_mount(&USERFatFS, USERPath, 1);   /* 1 = mount now */
-      printf("f_mount: %d\r\n", fr);
-
-      if (fr == FR_OK) {
-          DIR dir;
-          static FILINFO fno;
-
-          fr = f_opendir(&dir, "/");
-          printf("f_opendir /: %d\r\n", fr);
-
-          while (fr == FR_OK) {
-              fr = f_readdir(&dir, &fno);
-              if (fr != FR_OK || fno.fname[0] == 0) break;
-              printf("  %s %s\r\n",
-                     (fno.fattrib & AM_DIR) ? "[DIR] " : "      ",
-                     fno.fname);
-          }
-          f_closedir(&dir);
-          sd_multiblock_test();
-          flac_probe();
-          flac_throughput();
-      }
-  }
+    {
+        FRESULT fr = f_mount(&USERFatFS, USERPath, 1);   /* 1 = mount now */
+        printf("f_mount: %d\r\n", fr);
+        if (fr == FR_OK) {
+            flac_probe();
+        }
+    }
 
 
-  bool redraw = true;
-  int  playing = -1;
-
-  while (1) {
-      int delta;
-      int btn;
-
-      __disable_irq();
-      delta = enc_delta;
-      enc_delta = 0;
-      btn = btn_event_pending;
-      btn_event_pending = 0;
-      __enable_irq();
-
-      if (delta != 0) {
-          lib_move(&g_lib, &g_nav, delta);
-          redraw = true;
-      }
-
-      if (btn == 1) {
-          int track = lib_descend(&g_lib, &g_nav);
-          if (track >= 0) {
-              playing = track;
-              printf("play: %s\r\n", g_lib.tracks[track].title);
-          }
-          redraw = true;
-      } else if (btn == 2) {
-          lib_ascend(&g_lib, &g_nav);
-          redraw = true;
-      }
-
-      if (redraw) {
-          int n = lib_build_rows(&g_lib, &g_nav, g_rows,
-                                 LIB_MAX_ARTISTS, playing);
-
-          int *top = (g_nav.level == LIB_LEVEL_ARTIST) ? &g_nav.artist_top
-                   : (g_nav.level == LIB_LEVEL_ALBUM)  ? &g_nav.album_top
-                                                       : &g_nav.track_top;
-          int sel  = (g_nav.level == LIB_LEVEL_ARTIST) ? g_nav.artist_sel
-                   : (g_nav.level == LIB_LEVEL_ALBUM)  ? g_nav.album_sel
-                                                       : g_nav.track_sel;
-
-          screen_library_draw(&fb, &THEME_DARK, g_rows, n, sel, *top,
-                              lib_header(&g_lib, &g_nav), g_nav.level);
-
-          tft.bus->set_cs(tft.bus->ctx, true);
-          st7789_set_window(&tft, 0, 0, 239, 239);
-          st7789_write_pixels(&tft, fb_storage, 240u * 240u);
-          tft.bus->set_cs(tft.bus->ctx, false);
-
-          redraw = false;
-      }
-  }
 
   /* USER CODE END 2 */
 
-  /* Initialize leds */
-  BSP_LED_Init(LED_GREEN);
-  BSP_LED_Init(LED_YELLOW);
-  BSP_LED_Init(LED_RED);
-
-  /* Initialize USER push-button, will be used to trigger an interrupt each time it's pressed.*/
-  BSP_PB_Init(BUTTON_USER, BUTTON_MODE_EXTI);
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+  bool redraw = true;
+  int  playing = -1;
+
   while (1)
   {
 
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-	    printf("SYSCLK=%lu HCLK=%lu PCLK1=%lu\r\n",
-	           HAL_RCC_GetSysClockFreq(),
-	           HAL_RCC_GetHCLKFreq(),
-	           HAL_RCC_GetPCLK1Freq());
-	    HAL_Delay(1000);
-  }
+  int delta;
+       int btn;
+
+       __disable_irq();
+       delta = enc_delta;
+       enc_delta = 0;
+       btn = btn_event_pending;
+       btn_event_pending = 0;
+       __enable_irq();
+
+       if (delta != 0) {
+           lib_move(&g_lib, &g_nav, delta);
+           redraw = true;
+       }
+
+       if (btn == 1) {
+           int track = lib_descend(&g_lib, &g_nav);
+           if (track >= 0) {
+               playing = track;
+               printf("play: %s\r\n", g_lib.tracks[track].title);
+           }
+           redraw = true;
+       } else if (btn == 2) {
+           lib_ascend(&g_lib, &g_nav);
+           redraw = true;
+       }
+
+       if (redraw) {
+           int n = lib_build_rows(&g_lib, &g_nav, g_rows,
+                                  LIB_MAX_ARTISTS, playing);
+
+           int *top = (g_nav.level == LIB_LEVEL_ARTIST) ? &g_nav.artist_top
+                    : (g_nav.level == LIB_LEVEL_ALBUM)  ? &g_nav.album_top
+                                                        : &g_nav.track_top;
+           int sel  = (g_nav.level == LIB_LEVEL_ARTIST) ? g_nav.artist_sel
+                    : (g_nav.level == LIB_LEVEL_ALBUM)  ? g_nav.album_sel
+                                                        : g_nav.track_sel;
+
+           screen_library_draw(&fb, &THEME_DARK, g_rows, n, sel, *top,
+                               lib_header(&g_lib, &g_nav), g_nav.level);
+
+           tft.bus->set_cs(tft.bus->ctx, true);
+           st7789_set_window(&tft, 0, 0, 239, 239);
+           st7789_write_pixels(&tft, fb_storage, 240u * 240u);
+           tft.bus->set_cs(tft.bus->ctx, false);
+
+           redraw = false;
+       }
+   }
+
   /* USER CODE END 3 */
 }
 
@@ -766,29 +637,6 @@ static void hexdump(const uint8_t *p, unsigned n)
   }
 }
 
-void sd_multiblock_test(void)
-{
-  static uint8_t buf1[512];
-  static uint8_t buf8[8 * 512];
-  extern sd_t *user_diskio_get_sd(void);
-  sd_t *sd = user_diskio_get_sd();
-  sd_err_t e;
-
-  e = sd_read_blocks(sd, 0, buf1, 1);
-  printf("read 1 block  -> %d\r\n", (int)e);
-
-  e = sd_read_blocks(sd, 0, buf8, 2);
-  printf("read 2 blocks -> %d\r\n", (int)e);
-
-  e = sd_read_blocks(sd, 0, buf8, 8);
-  printf("read 8 blocks -> %d\r\n", (int)e);
-
-  printf("first 8 bytes: %02X %02X %02X %02X %02X %02X %02X %02X\r\n",
-         buf8[0], buf8[1], buf8[2], buf8[3],
-         buf8[4], buf8[5], buf8[6], buf8[7]);
-  printf("block 2 start: %02X %02X %02X %02X\r\n",
-         buf8[512], buf8[513], buf8[514], buf8[515]);
-}
 
 void flac_probe(void)
 {
@@ -812,44 +660,18 @@ void flac_probe(void)
   }
   f_closedir(&probe_dir);
 
-  if (probe_path[0] == '\0') { printf("no .flac in /Music\r\n"); return; }
+  if (probe_path[0] == '\0') { printf("no .flac in /Music/Chon/Chon - Grow\r\n"); return; }
   printf("opening: %s\r\n", probe_path);
 
   fr = f_open(&probe_fil, probe_path, FA_READ);
   printf("f_open -> %d\r\n", (int)fr);
   if (fr != FR_OK) return;
 
-  memset(probe_buf, 0xA5, sizeof probe_buf);        /* poison, see below */
+  memset(probe_buf, 0xA5, sizeof probe_buf);        /* poison: distinguishes "read wrote nothing" from "read returned zeros" */
   fr = f_read(&probe_fil, probe_buf, sizeof probe_buf, &br);
   printf("f_read -> %d, br=%u\r\n", (int)fr, (unsigned)br);
   if (fr == FR_OK) hexdump(probe_buf, br);
 
-  f_close(&probe_fil);
-}
-
-void flac_throughput(void)
-{
-  static uint8_t chunk[4096];
-  FRESULT fr;
-  UINT br;
-  uint32_t total = 0, sum = 0, t0;
-
-  fr = f_open(&probe_fil, probe_path, FA_READ);
-  if (fr != FR_OK) { printf("f_open -> %d\r\n", (int)fr); return; }
-
-  t0 = HAL_GetTick();
-  for (;;) {
-    fr = f_read(&probe_fil, chunk, sizeof chunk, &br);
-    if (fr != FR_OK) { printf("f_read -> %d at %lu\r\n", (int)fr, (unsigned long)total); break; }
-    if (br == 0) break;
-    for (UINT i = 0; i < br; i++) sum += chunk[i];
-    total += br;
-  }
-  uint32_t ms = HAL_GetTick() - t0;
-
-  printf("read %lu bytes in %lu ms", (unsigned long)total, (unsigned long)ms);
-  if (ms) printf(" = %lu KB/s", (unsigned long)(total / ms));
-  printf(", checksum %08lX\r\n", (unsigned long)sum);
   f_close(&probe_fil);
 }
 
