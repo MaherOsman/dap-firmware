@@ -803,7 +803,7 @@ void flac_probe(void)
 
 void flac_throughput(void)
 {
-  static uint8_t chunk[4096];
+  static uint8_t chunk[512];
   FRESULT fr;
   UINT br;
   uint32_t total = 0, sum = 0, t0;
