@@ -11,25 +11,12 @@ CFLAGS  := -std=c11 -Wall -Wextra -Werror -Wshadow -Wconversion \
            -Wno-sign-conversion -O2 -g
 BUILD   := build
 
-.DEFAULT_GOAL := all
-
 CORE    := src/core/ringbuf.c src/core/wav.c src/core/audio.c \
            src/core/encoder.c src/core/player.c \
            src/core/font.c src/core/font_data.c src/core/gfx.c \
-           src/core/theme.c src/core/decoder.c src/core/decoder_wav.c \
-           src/core/decoder_flac.c
-
+           src/core/theme.c src/core/decoder.c src/core/decoder_wav.c
 DRIVERS := src/drivers/st7789.c
 UI      := src/ui/screen_library.c
-
-# dr_flac is third-party and will not survive -Werror -Wconversion. It gets
-# its own relaxed rule rather than us editing someone else's library, which
-# would have to be redone on every update.
-VENDOR_OBJ := $(BUILD)/dr_flac_impl.o
-VENDOR_CFLAGS := -std=c11 -O2 -g -w
-
-$(VENDOR_OBJ): src/core/dr_flac_impl.c third_party/dr_flac.h | $(BUILD)
-	$(CC) $(VENDOR_CFLAGS) -c -o $@ $<
 
 TESTS   := test_ringbuf test_wav test_audio test_encoder \
            test_player test_st7789 test_font test_gfx test_decoder
@@ -43,8 +30,8 @@ all: test
 $(BUILD):
 	@mkdir -p $(BUILD)
 
-$(BUILD)/%: tests/%.c $(CORE) $(DRIVERS) $(UI) $(VENDOR_OBJ) | $(BUILD)
-	$(CC) $(CFLAGS) -o $@ $< $(CORE) $(DRIVERS) $(UI) $(VENDOR_OBJ)
+$(BUILD)/%: tests/%.c $(CORE) $(DRIVERS) $(UI) | $(BUILD)
+	$(CC) $(CFLAGS) -o $@ $< $(CORE) $(DRIVERS) $(UI)
 
 # Render real 240x240 screens to images you can look at.
 preview: | $(BUILD)

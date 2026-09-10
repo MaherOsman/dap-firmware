@@ -17,7 +17,7 @@
 #include <stdint.h>
 
 #define DECODER_MAX_HEADER  64      /* bytes probe() gets to identify a format */
-#define DECODER_STATE_BYTES 32768   /* per-instance arena; sized for FLAC */
+#define DECODER_STATE_BYTES 65536   /* per-instance arena; sized for FLAC, measured not guessed */
 
 typedef struct {
     uint32_t sample_rate;
@@ -68,5 +68,9 @@ void   decoder_close(decoder_t *d);
 const char *decoder_name(const decoder_t *d);
 
 extern const decoder_vtable_t decoder_wav_vt;
+extern const decoder_vtable_t decoder_flac_vt;
+
+/* Peak bytes dr_flac took from the arena — for sizing DECODER_STATE_BYTES. */
+size_t decoder_flac_arena_peak(const decoder_t *d);
 
 #endif /* DECODER_H */
