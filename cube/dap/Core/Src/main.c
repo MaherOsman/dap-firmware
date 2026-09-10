@@ -207,7 +207,7 @@ int main(void)
     }
 
     plat_audio_init(&hsai_BlockA1);
-    plat_audio_play("/Music/betrayflip/betrayflip - The Nowhere Place - 01 Memory Blur.wav");
+    plat_audio_play("/Music/betrayflip/betrayflip - The Nowhere Place/betrayflip - The Nowhere Place - 04 Irrational.wav");
 
     //if (plat_sai_start_tone(&hsai_BlockA1) != 0) {
        // printf("SAI: DMA transmit failed to start\r\n");
@@ -661,7 +661,7 @@ void flac_probe(void)
   FRESULT fr;
   UINT br = 0;
 
-  fr = f_opendir(&probe_dir, "/Music/Chon/Chon - Grow");
+  fr = f_opendir(&probe_dir, "/Music/betrayflip/betrayflip - The Nowhere Place");
   printf("f_opendir(/Music/Chon/Chon - Grow) -> %d\r\n", (int)fr);
   if (fr != FR_OK) return;
 
@@ -674,11 +674,11 @@ void flac_probe(void)
     printf("  file: %s (%lu bytes)\r\n",
            probe_fno.fname, (unsigned long)probe_fno.fsize);
     if (probe_path[0] == '\0' && ends_with_flac(probe_fno.fname))
-      snprintf(probe_path, sizeof probe_path, "/Music/Chon/Chon - Grow/%s", probe_fno.fname);
+      snprintf(probe_path, sizeof probe_path, "/Music/betrayflip/betrayflip - The Nowhere Place/%s", probe_fno.fname);
   }
   f_closedir(&probe_dir);
 
-  if (probe_path[0] == '\0') { printf("no .flac in /Music/Chon/Chon - Grow\r\n"); return; }
+  if (probe_path[0] == '\0') { printf("no .flac in /Music/betrayflip/betrayflip - The Nowhere Place\r\n"); return; }
   printf("opening: %s\r\n", probe_path);
 
   fr = f_open(&probe_fil, probe_path, FA_READ);

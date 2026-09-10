@@ -116,7 +116,7 @@ void plat_audio_init(SAI_HandleTypeDef *hsai)
     g_hsai = hsai;
     rb_init(&g_rb, g_ring_store, RING_BYTES);
     player_init(&g_pl);
-    player_set_volume(&g_pl, 100);
+    player_set_volume(&g_pl, 20);
 }
 
 int plat_audio_play(const char *path)
