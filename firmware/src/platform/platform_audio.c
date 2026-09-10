@@ -1,7 +1,7 @@
 #include "platform_audio.h"
 #include "ringbuf.h"
 #include "player.h"
-#include "wav.h"
+#include "decoder.h"
 #include "audio.h"
 #include "ff.h"
 #include <string.h>
@@ -11,28 +11,26 @@
  * DMA buffer: 1024 frames per half = 23 ms of audio at 44.1 kHz. The ISR has
  * that long to refill a half before it is played, which is enormous.
  * Ring: 64 KiB = 8192 frames = ~185 ms of slack against SD read jitter.
- * READ_BYTES is a multiple of 6 so every f_read lands on a frame boundary.
+ * The decoder owns frame alignment now; this buffer just holds its output.
  */
 #define HALF_FRAMES   1024u
 #define HALF_SAMPLES  (HALF_FRAMES * 2u)
 #define TOTAL_SAMPLES (HALF_SAMPLES * 2u)
 #define RING_BYTES    65536u
-#define READ_BYTES    6144u
-#define UNPACK_SAMPLES (READ_BYTES / 3u)
+#define UNPACK_SAMPLES 2048u
 
 /* Large buffers must be static — they must not land on the stack. */
 static int32_t  g_dma[TOTAL_SAMPLES];
 static uint8_t  g_ring_store[RING_BYTES];
-static uint8_t  g_readbuf[READ_BYTES];
 static int32_t  g_unpack[UNPACK_SAMPLES];
 
 static ringbuf_t g_rb;
 static player_t  g_pl;
 static FIL       g_fil;
-static wav_info_t g_info;
+static decoder_t g_dec;
 static SAI_HandleTypeDef *g_hsai;
 
-static uint32_t g_bytes_left;      /* remaining in the data chunk */
+static decoder_info_t g_info;      /* remaining in the data chunk */
 static bool     g_file_open;
 static bool     g_dma_running;
 
@@ -74,26 +72,18 @@ void HAL_SAI_TxCpltCallback(SAI_HandleTypeDef *hsai)
 /* ---- producer side: runs in the main loop ------------------------------- */
 static void refill_from_file(void)
 {
-    if (!g_file_open || g_bytes_left == 0) {
-        player_set_exhausted(&g_pl, true);
-        return;
-    }
-    if (rb_free(&g_rb) < UNPACK_SAMPLES * sizeof(int32_t)) return;
+    if (!g_file_open) { player_set_exhausted(&g_pl, true); return; }
 
-    uint32_t want = READ_BYTES;
-    if (want > g_bytes_left) want = g_bytes_left;
-    want -= want % g_info.block_align;
-    if (want == 0) { player_set_exhausted(&g_pl, true); return; }
+    const size_t frames_room = rb_free(&g_rb) / (2u * sizeof(int32_t));
+    if (frames_room < 256) return;
 
-    UINT br = 0;
-    if (f_read(&g_fil, g_readbuf, want, &br) != FR_OK || br == 0) {
-        player_set_exhausted(&g_pl, true);
-        return;
-    }
-    g_bytes_left -= br;
+    size_t want = UNPACK_SAMPLES / 2u;      /* frames the scratch can hold */
+    if (want > frames_room) want = frames_room;
 
-    size_t samples = br / 3u;                 /* 24-bit: 3 bytes per sample */
-    audio_unpack_s24(g_readbuf, g_unpack, samples);
+    size_t got = decoder_decode(&g_dec, g_unpack, want);
+    if (got == 0) { player_set_exhausted(&g_pl, true); return; }
+
+    size_t samples = got * 2u;
     if (g_pl.volume < 100)
         audio_apply_gain(g_unpack, samples, audio_volume_q16(g_pl.volume));
 
@@ -112,11 +102,31 @@ static void start_dma(void)
 }
 
 void plat_audio_init(SAI_HandleTypeDef *hsai)
+
 {
     g_hsai = hsai;
+    decoder_registry_clear();
+    decoder_register(&decoder_wav_vt);
     rb_init(&g_rb, g_ring_store, RING_BYTES);
     player_init(&g_pl);
     player_set_volume(&g_pl, 20);
+}
+
+static size_t fatfs_read(void *ctx, void *dst, size_t n)
+{
+    UINT br = 0;
+    if (f_read((FIL *)ctx, dst, (UINT)n, &br) != FR_OK) return 0;
+    return (size_t)br;
+}
+
+static bool fatfs_seek(void *ctx, uint32_t off)
+{
+    return f_lseek((FIL *)ctx, off) == FR_OK;
+}
+
+static uint32_t fatfs_size(void *ctx)
+{
+    return (uint32_t)f_size((FIL *)ctx);
 }
 
 int plat_audio_play(const char *path)
@@ -129,27 +139,21 @@ int plat_audio_play(const char *path)
     }
     g_file_open = true;
 
-    UINT br = 0;
-    if (f_read(&g_fil, g_readbuf, 4096, &br) != FR_OK) return -2;
-
-    wav_err_t we = wav_parse(g_readbuf, br, &g_info);
-    if (we != WAV_OK) {
-        printf("audio: wav_parse: %s\r\n", wav_err_str(we));
-        return -3;
+    decoder_io_t io = { fatfs_read, fatfs_seek, fatfs_size, &g_fil };
+    if (!decoder_open(&g_dec, io, &g_info)) {
+        printf("audio: no decoder for this file\r\n");
+        return -2;
     }
-    printf("audio: %lu Hz, %u-bit, %u ch, %lu frames\r\n",
+
+    printf("audio: %s, %lu Hz, %u-bit, %u ch, %lu frames\r\n",
+           decoder_name(&g_dec),
            (unsigned long)g_info.sample_rate, g_info.bits_per_sample,
            g_info.channels, (unsigned long)g_info.total_frames);
 
-    /* The SAI is clocked for 44.1 kHz stereo 24-bit only, right now. */
-    if (g_info.sample_rate != 44100 || g_info.channels != 2 ||
-        g_info.bits_per_sample != 24) {
-        printf("audio: unsupported format for this build\r\n");
-        return -4;
+    if (g_info.sample_rate != 44100) {
+        printf("audio: SAI is clocked for 44.1 kHz only\r\n");
+        return -3;
     }
-
-    if (f_lseek(&g_fil, g_info.data_offset) != FR_OK) return -5;
-    g_bytes_left = g_info.data_bytes;
 
     rb_reset(&g_rb);
     g_isr_frames = 0;
@@ -193,6 +197,7 @@ void plat_audio_stop(void)
     if (g_file_open)   { f_close(&g_fil);         g_file_open = false; }
     player_stop(&g_pl);
     rb_reset(&g_rb);
+    decoder_close(&g_dec);
 }
 
 bool plat_audio_is_active(void) { return g_pl.state != PLAYER_STOPPED; }

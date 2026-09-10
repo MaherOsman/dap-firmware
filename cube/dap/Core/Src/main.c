@@ -662,7 +662,7 @@ void flac_probe(void)
   UINT br = 0;
 
   fr = f_opendir(&probe_dir, "/Music/betrayflip/betrayflip - The Nowhere Place");
-  printf("f_opendir(/Music/Chon/Chon - Grow) -> %d\r\n", (int)fr);
+  printf("f_opendir(/Music/betrayflip/betrayflip - The Nowhere Place) -> %d\r\n", (int)fr);
   if (fr != FR_OK) return;
 
   probe_path[0] = '\0';
