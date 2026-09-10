@@ -79,11 +79,6 @@ static lib_nav_t     g_nav;
 static lib_row_t     g_rows[LIB_MAX_ARTISTS];
 static volatile int  btn_event_pending = 0;
 
-static DIR      probe_dir;
-static FILINFO  probe_fno;
-static FIL      probe_fil;
-static char     probe_path[300];
-static uint8_t  probe_buf[64];
 
 extern const st7789_bus_t platform_st7789_bus;
 int plat_sai_start_tone(SAI_HandleTypeDef *hsai);
@@ -103,7 +98,6 @@ static void MX_USART3_UART_Init(void);
 static void MX_TIM6_Init(void);
 /* USER CODE BEGIN PFP */
 
-void flac_probe(void);
 
 /* USER CODE END PFP */
 
@@ -202,7 +196,6 @@ int main(void)
         FRESULT fr = f_mount(&USERFatFS, USERPath, 1);   /* 1 = mount now */
         printf("f_mount: %d\r\n", fr);
         if (fr == FR_OK) {
-            flac_probe();
         }
     }
 
@@ -626,18 +619,6 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
   }
 }
 
-static int ends_with_flac(const char *s)
-{
-  size_t n = strlen(s);
-  if (n < 5) return 0;
-  const char *e = s + n - 5;
-  return e[0] == '.'
-      && (e[1] == 'f' || e[1] == 'F')
-      && (e[2] == 'l' || e[2] == 'L')
-      && (e[3] == 'a' || e[3] == 'A')
-      && (e[4] == 'c' || e[4] == 'C');
-}
-
 static void hexdump(const uint8_t *p, unsigned n)
 {
   for (unsigned i = 0; i < n; i += 16) {
@@ -655,43 +636,6 @@ static void hexdump(const uint8_t *p, unsigned n)
   }
 }
 
-
-void flac_probe(void)
-{
-  FRESULT fr;
-  UINT br = 0;
-
-  fr = f_opendir(&probe_dir, "/Music/betrayflip/betrayflip - The Nowhere Place");
-  printf("f_opendir(/Music/betrayflip/betrayflip - The Nowhere Place) -> %d\r\n", (int)fr);
-  if (fr != FR_OK) return;
-
-  probe_path[0] = '\0';
-  for (;;) {
-    fr = f_readdir(&probe_dir, &probe_fno);
-    if (fr != FR_OK) { printf("f_readdir -> %d\r\n", (int)fr); break; }
-    if (probe_fno.fname[0] == '\0') break;          /* end of directory */
-    if (probe_fno.fattrib & AM_DIR) { printf("  dir : %s\r\n", probe_fno.fname); continue; }
-    printf("  file: %s (%lu bytes)\r\n",
-           probe_fno.fname, (unsigned long)probe_fno.fsize);
-    if (probe_path[0] == '\0' && ends_with_flac(probe_fno.fname))
-      snprintf(probe_path, sizeof probe_path, "/Music/betrayflip/betrayflip - The Nowhere Place/%s", probe_fno.fname);
-  }
-  f_closedir(&probe_dir);
-
-  if (probe_path[0] == '\0') { printf("no .flac in /Music/betrayflip/betrayflip - The Nowhere Place\r\n"); return; }
-  printf("opening: %s\r\n", probe_path);
-
-  fr = f_open(&probe_fil, probe_path, FA_READ);
-  printf("f_open -> %d\r\n", (int)fr);
-  if (fr != FR_OK) return;
-
-  memset(probe_buf, 0xA5, sizeof probe_buf);        /* poison: distinguishes "read wrote nothing" from "read returned zeros" */
-  fr = f_read(&probe_fil, probe_buf, sizeof probe_buf, &br);
-  printf("f_read -> %d, br=%u\r\n", (int)fr, (unsigned)br);
-  if (fr == FR_OK) hexdump(probe_buf, br);
-
-  f_close(&probe_fil);
-}
 
 /* USER CODE END 4 */
 
