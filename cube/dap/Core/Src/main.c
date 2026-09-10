@@ -200,7 +200,7 @@ int main(void)
     }
 
     plat_audio_init(&hsai_BlockA1);
-    plat_audio_play("/Music/betrayflip/betrayflip - The Nowhere Place/betrayflip - The Nowhere Place - 09 More Than a Glitch.wav");
+    plat_audio_play("/Music/Chon/Chon - Grow/12 But.flac");
 
     //if (plat_sai_start_tone(&hsai_BlockA1) != 0) {
        // printf("SAI: DMA transmit failed to start\r\n");

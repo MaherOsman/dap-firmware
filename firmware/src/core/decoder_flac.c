@@ -152,9 +152,15 @@ static size_t flac_decode(decoder_t *d, int32_t *dst, size_t frames)
     flac_state_t *st = S(d);
     if (!st->fl) return 0;
 
-    drflac_uint64 got = drflac_read_pcm_frames_s32(st->fl,
-                                                   (drflac_uint64)frames,
-                                                   dst);
+    /* int32_t and drflac_int32 are both 32-bit but are spelled differently
+         * by different toolchains (int vs long int on ARM), so C rejects the
+         * pointer conversion even though the layout is identical. The assert
+         * below is what makes the cast safe rather than hopeful. */
+        _Static_assert(sizeof(drflac_int32) == sizeof(int32_t),
+                       "drflac_int32 must match int32_t");
+        drflac_uint64 got = drflac_read_pcm_frames_s32(st->fl,
+                                                       (drflac_uint64)frames,
+                                                       (drflac_int32 *)dst);
     if (got == 0) return 0;
 
     if (st->fl->channels == 1) audio_mono_to_stereo(dst, (size_t)got);

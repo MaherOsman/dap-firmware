@@ -33,6 +33,7 @@ static SAI_HandleTypeDef *g_hsai;
 static decoder_info_t g_info;      /* remaining in the data chunk */
 static bool     g_file_open;
 static bool     g_dma_running;
+static uint32_t g_refill_max_ms;
 
 /* Written by the ISR, drained by the main loop. */
 static volatile uint32_t g_isr_frames;
@@ -107,6 +108,7 @@ void plat_audio_init(SAI_HandleTypeDef *hsai)
     g_hsai = hsai;
     decoder_registry_clear();
     decoder_register(&decoder_wav_vt);
+    decoder_register(&decoder_flac_vt);
     rb_init(&g_rb, g_ring_store, RING_BYTES);
     player_init(&g_pl);
     player_set_volume(&g_pl, 20);
@@ -156,8 +158,8 @@ int plat_audio_play(const char *path)
     }
 
     rb_reset(&g_rb);
-    g_isr_frames = 0;
     g_isr_underruns = 0;
+    g_refill_max_ms = 0;
     player_open(&g_pl, g_info.total_frames, g_info.sample_rate);
     return 0;
 }
@@ -178,16 +180,28 @@ void plat_audio_service(void)
     uint8_t pct = buffer_pct();
     player_tick(&g_pl, pct);
 
-    if (!g_pl.file_exhausted && player_needs_refill(&g_pl, pct))
+    if (!g_pl.file_exhausted && player_needs_refill(&g_pl, pct)) {
+        uint32_t t0 = HAL_GetTick();
         refill_from_file();
-
+        uint32_t dt = HAL_GetTick() - t0;
+        if (dt > g_refill_max_ms) g_refill_max_ms = dt;
+    }
     if (!g_dma_running && player_output_enabled(&g_pl))
         start_dma();
 
     if (g_pl.file_exhausted && rb_is_empty(&g_rb) && g_dma_running) {
         plat_audio_stop();
-        printf("audio: end of track, %lu underruns\r\n",
-               (unsigned long)g_pl.underruns);
+        printf("audio: end of track, %lu underruns, worst refill %lu ms\r\n",
+               (unsigned long)g_pl.underruns,
+               (unsigned long)g_refill_max_ms);
+    }
+
+    static uint32_t last_report;
+    if (HAL_GetTick() - last_report > 2000) {
+        last_report = HAL_GetTick();
+        printf("audio: buf %u%%, underruns %lu, worst refill %lu ms\r\n",
+               pct, (unsigned long)g_pl.underruns,
+               (unsigned long)g_refill_max_ms);
     }
 }
 
