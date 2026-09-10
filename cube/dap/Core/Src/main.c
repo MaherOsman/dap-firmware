@@ -82,6 +82,9 @@ static FIL      probe_fil;
 static char     probe_path[300];
 static uint8_t  probe_buf[64];
 
+extern const st7789_bus_t platform_st7789_bus;
+int plat_sai_start_tone(SAI_HandleTypeDef *hsai);
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -198,6 +201,11 @@ int main(void)
         }
     }
 
+    if (plat_sai_start_tone(&hsai_BlockA1) != 0) {
+        printf("SAI: DMA transmit failed to start\r\n");
+    } else {
+        printf("SAI: tone started\r\n");
+    }
 
 
   /* USER CODE END 2 */
