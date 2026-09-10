@@ -32,7 +32,8 @@ $(VENDOR_OBJ): src/core/dr_flac_impl.c third_party/dr_flac.h | $(BUILD)
 	$(CC) $(VENDOR_CFLAGS) -c -o $@ $<
 
 TESTS   := test_ringbuf test_wav test_audio test_encoder \
-           test_player test_st7789 test_font test_gfx test_decoder
+           test_player test_st7789 test_font test_gfx test_decoder \
+           test_decoder_flac
 
 BINS    := $(addprefix $(BUILD)/,$(TESTS))
 
