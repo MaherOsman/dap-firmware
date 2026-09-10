@@ -23,9 +23,13 @@
 #include <stdint.h>
 
 #ifndef RB_PUBLISH_BARRIER
-/* On the host this is a compiler barrier. In the STM32 port, define this to
- * __DMB() before including, so the data write is visible before the index. */
+#if defined(__ARM_ARCH_7EM__) || defined(__ARM_ARCH_7M__)
+/* Cortex-M: the data write must land before the index that publishes it.
+ * A compiler barrier is not enough — the M7 has a store buffer. */
+#define RB_PUBLISH_BARRIER() __asm__ __volatile__("dmb 0xF" ::: "memory")
+#else
 #define RB_PUBLISH_BARRIER() __asm__ __volatile__("" ::: "memory")
+#endif
 #endif
 
 typedef struct {

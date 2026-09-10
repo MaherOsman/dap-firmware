@@ -250,6 +250,53 @@ TEST(flac_output_is_full_scale_q1_31)
     fclose(f);
 }
 
+TEST(flac_arena_across_the_library)
+{
+    /* One file told us 42000 bytes. That is a sample, not a bound — dr_flac
+     * allocates against the max block size in each file's STREAMINFO, and a
+     * differently-encoded album can ask for more. This walks a folder so
+     * DECODER_STATE_BYTES is set from a measured worst case. */
+    static const char *dir = "C:/Users/maher/Downloads/testmusic/Chon-Grow";
+    static const char *names[] = {
+        "01 Drift.flac", "02 Story.flac", "03 Fall.flac", "04 Book.flac",
+        "05 Can't Wait.flac", "06 Suda.flac", "07 Knot.flac", "08 Moon.flac",
+        "09 Splash.flac", "10 Perfect Pillow.flac", "11 Echo.flac",
+        "12 But.flac",
+    };
+
+    register_all();
+    size_t worst = 0;
+    int opened = 0;
+
+    for (size_t i = 0; i < sizeof names / sizeof *names; i++) {
+        char path[512];
+        snprintf(path, sizeof path, "%s/%s", dir, names[i]);
+        FILE *f = fopen(path, "rb");
+        if (!f) continue;
+
+        decoder_t d;
+        decoder_info_t info;
+        if (decoder_open(&d, file_io(f), &info)) {
+            size_t peak = decoder_flac_arena_peak(&d);
+            if (peak > worst) worst = peak;
+            opened++;
+            printf("    %-26s %6lu bytes  %2u-bit\n",
+                   names[i], (unsigned long)peak, info.bits_per_sample);
+            decoder_close(&d);
+        } else {
+            printf("    %-26s FAILED TO OPEN\n", names[i]);
+            CHECK(false);
+        }
+        fclose(f);
+    }
+
+    if (opened == 0) return;    /* library not on this machine */
+    printf("    worst arena peak: %lu of %u bytes (%lu%% headroom)\n",
+           (unsigned long)worst, DECODER_STATE_BYTES,
+           (unsigned long)(100u - (worst * 100u / DECODER_STATE_BYTES)));
+    CHECK(worst < DECODER_STATE_BYTES);
+}
+
 int main(void)
 {
     printf("decoder_flac\n");
@@ -268,5 +315,6 @@ int main(void)
     RUN(flac_seek_returns_the_same_audio);
     RUN(flac_reaches_end_of_stream);
     RUN(flac_output_is_full_scale_q1_31);
+    RUN(flac_arena_across_the_library);
     return TEST_SUMMARY();
 }
