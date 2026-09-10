@@ -14,12 +14,12 @@ BUILD   := build
 CORE    := src/core/ringbuf.c src/core/wav.c src/core/audio.c \
            src/core/encoder.c src/core/player.c \
            src/core/font.c src/core/font_data.c src/core/gfx.c \
-           src/core/theme.c
+           src/core/theme.c src/core/decoder.c src/core/decoder_wav.c
 DRIVERS := src/drivers/st7789.c
 UI      := src/ui/screen_library.c
 
 TESTS   := test_ringbuf test_wav test_audio test_encoder \
-           test_player test_st7789 test_font test_gfx
+           test_player test_st7789 test_font test_gfx test_decoder
 
 BINS    := $(addprefix $(BUILD)/,$(TESTS))
 
