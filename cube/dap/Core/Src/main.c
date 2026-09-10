@@ -67,6 +67,9 @@ static uint16_t fb_storage[240 * 240];
 static gfx_t    fb;
 static st7789_t tft;
 extern const st7789_bus_t platform_st7789_bus;
+void plat_audio_init(SAI_HandleTypeDef *hsai);
+int  plat_audio_play(const char *path);
+void plat_audio_service(void);
 
 static encoder_t enc;
 static volatile int enc_delta = 0;
@@ -84,6 +87,8 @@ static uint8_t  probe_buf[64];
 
 extern const st7789_bus_t platform_st7789_bus;
 int plat_sai_start_tone(SAI_HandleTypeDef *hsai);
+
+
 
 /* USER CODE END PV */
 
@@ -201,11 +206,14 @@ int main(void)
         }
     }
 
-    if (plat_sai_start_tone(&hsai_BlockA1) != 0) {
-        printf("SAI: DMA transmit failed to start\r\n");
-    } else {
-        printf("SAI: tone started\r\n");
-    }
+    plat_audio_init(&hsai_BlockA1);
+    plat_audio_play("/Music/betrayflip/betrayflip - The Nowhere Place - 01 Memory Blur.wav");
+
+    //if (plat_sai_start_tone(&hsai_BlockA1) != 0) {
+       // printf("SAI: DMA transmit failed to start\r\n");
+   // }// else {
+       // printf("SAI: tone started\r\n");
+    //}
 
 
   /* USER CODE END 2 */
@@ -222,6 +230,8 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+  plat_audio_service();
+
   int delta;
        int btn;
 
