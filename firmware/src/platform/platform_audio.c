@@ -109,6 +109,9 @@ void plat_audio_init(SAI_HandleTypeDef *hsai)
     decoder_registry_clear();
     decoder_register(&decoder_wav_vt);
     decoder_register(&decoder_flac_vt);
+    decoder_register(&decoder_wav_vt);
+    decoder_register(&decoder_flac_vt);
+    decoder_register(&decoder_mp3_vt);
     rb_init(&g_rb, g_ring_store, RING_BYTES);
     player_init(&g_pl);
     player_set_volume(&g_pl, 20);
