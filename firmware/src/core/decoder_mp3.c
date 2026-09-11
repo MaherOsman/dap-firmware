@@ -11,8 +11,8 @@
 
 #define DR_MP3_NO_STDIO
 #define DR_MP3_NO_SIMD
+#define DRMP3_DATA_CHUNK_SIZE 16384   /* default is 65536 — desktop sizing */
 #include "../../third_party/dr_mp3.h"
-
 #define MP3_SCRATCH_FRAMES 1152
 
 typedef struct {
@@ -24,8 +24,11 @@ typedef struct {
     int16_t    scratch[MP3_SCRATCH_FRAMES * 2];
     size_t     arena_used;
     size_t     arena_peak;
-    uint8_t    arena[DECODER_STATE_BYTES - sizeof(drmp3) - 8192];
+    uint8_t    arena[24576];
 } mp3_state_t;
+
+_Static_assert(sizeof(mp3_state_t) <= DECODER_STATE_BYTES,
+               "mp3_state_t must fit in the decoder arena");
 
 static mp3_state_t *S(decoder_t *d) { return (mp3_state_t *)d->state.bytes; }
 

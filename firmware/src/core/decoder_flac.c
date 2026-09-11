@@ -109,12 +109,10 @@ static drflac_bool32 flac_on_tell(void *ud, drflac_int64 *cursor)
 
 static bool flac_probe(const uint8_t *h, size_t len)
 {
-    /* Native FLAC starts with the fLaC marker. An ID3v2 tag may precede it
-     * on files tagged by some editors, so accept that too and let dr_flac
-     * skip the tag itself. */
-    if (len >= 4 && memcmp(h, "fLaC", 4) == 0) return true;
-    if (len >= 10 && memcmp(h, "ID3", 3) == 0) return true;
-    return false;
+    /* Native FLAC only. An ID3v2 prefix was allowed here originally, but
+     * ID3 is an MP3 convention and this decoder is registered first, so it
+     * was claiming every MP3 in the library. */
+    return len >= 4 && memcmp(h, "fLaC", 4) == 0;
 }
 
 static bool flac_open_impl(decoder_t *d, decoder_info_t *out)
