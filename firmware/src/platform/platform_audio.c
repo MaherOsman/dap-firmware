@@ -82,6 +82,11 @@ static void refill_from_file(void)
     if (want > frames_room) want = frames_room;
 
     size_t got = decoder_decode(&g_dec, g_unpack, want);
+    if (got != want) {
+        printf("audio: decode returned %u of %u, pos %lu ms\r\n",
+               (unsigned)got, (unsigned)want,
+               (unsigned long)player_position_ms(&g_pl));
+    }
     if (got == 0) { player_set_exhausted(&g_pl, true); return; }
 
     size_t samples = got * 2u;
@@ -120,7 +125,17 @@ void plat_audio_init(SAI_HandleTypeDef *hsai)
 static size_t fatfs_read(void *ctx, void *dst, size_t n)
 {
     UINT br = 0;
-    if (f_read((FIL *)ctx, dst, (UINT)n, &br) != FR_OK) return 0;
+    FRESULT fr = f_read((FIL *)ctx, dst, (UINT)n, &br);
+    if (fr != FR_OK) {
+        /* Returning 0 here is indistinguishable from EOF to the decoder,
+         * which is why a transient card error looked like a finished track. */
+        printf("audio: f_read error %d (asked %u, got %u)\r\n",
+               (int)fr, (unsigned)n, (unsigned)br);
+        return 0;
+    }
+    if (br < n) {
+        printf("audio: short read %u of %u\r\n", (unsigned)br, (unsigned)n);
+    }
     return (size_t)br;
 }
 
@@ -143,6 +158,7 @@ int plat_audio_play(const char *path)
         return -1;
     }
     g_file_open = true;
+    printf("audio: file size %lu bytes\r\n", (unsigned long)f_size(&g_fil));
 
     decoder_io_t io = { fatfs_read, fatfs_seek, fatfs_size, &g_fil };
     if (!decoder_open(&g_dec, io, &g_info)) {

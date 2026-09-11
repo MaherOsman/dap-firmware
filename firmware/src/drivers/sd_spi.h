@@ -7,6 +7,8 @@
 
 #define SD_BLOCK_SIZE 512u
 
+extern uint8_t sd_last_bad_token;
+
 /* ------------------------------------------------------------------ */
 /* Injected bus — the only thing the platform layer must supply.       */
 /* ------------------------------------------------------------------ */

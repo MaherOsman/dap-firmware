@@ -1,6 +1,11 @@
 #include "sd_spi.h"
 #include <string.h>
 
+/* Last non-0xFF/0xFE byte seen while waiting for a data token. Diagnostic
+ * only: a real error token has the top nibble clear, so a value like 0xFD
+ * or 0xF7 points at a corrupted 0xFF rather than a card-reported error. */
+uint8_t sd_last_bad_token;
+
 /* ------------------------------------------------------------------ */
 /* Command indices                                                     */
 /* ------------------------------------------------------------------ */
@@ -299,7 +304,7 @@ static sd_err_t wait_data_token(sd_t *sd) {
     for (;;) {
         uint8_t t = rx_byte(sd);
         if (t == TOKEN_START_BLOCK) return SD_OK;
-        if (t != 0xFF) return SD_ERR_READ_TOKEN;  /* error token       */
+        if (t != 0xFF) { sd_last_bad_token = t; return SD_ERR_READ_TOKEN; }
 
         if (sd->bus.millis(sd->bus.ctx) - start > READ_TOKEN_TIMEOUT_MS) {
             return SD_ERR_READ_TOKEN;
@@ -340,30 +345,42 @@ sd_err_t sd_read_blocks(sd_t *sd, uint32_t lba, uint8_t *dst, uint32_t count) {
      * which FatFs reports as "no filesystem". */
     uint32_t addr = sd->block_addressed ? lba : (lba * SD_BLOCK_SIZE);
 
-    sd_err_t result;
+    sd_err_t result = SD_ERR_TIMEOUT;
 
-    if (count == 1) {
-        cs_low(sd);
-        if (send_cmd(sd, CMD17, addr) != 0x00) { result = SD_ERR_READ_CMD; goto out; }
-        result = read_data_block(sd, dst);
-        goto out;
-    }
+        /* Cards legitimately stall - internal wear levelling, a block needing
+         * a retry internally - and hold DO low past our token deadline. One
+         * failed token is not a dead card; every production driver retries.
+         * Without this a single stall ends the track. */
+        for (int attempt = 0; attempt < 3; attempt++) {
+            if (attempt > 0) {
+                cs_high(sd);
+                (void)wait_not_busy(sd);
+            }
 
-    cs_low(sd);
-    if (send_cmd(sd, CMD18, addr) != 0x00) { result = SD_ERR_READ_CMD; goto out; }
+            if (count == 1) {
+                cs_low(sd);
+                if (send_cmd(sd, CMD17, addr) != 0x00) { result = SD_ERR_READ_CMD; }
+                else result = read_data_block(sd, dst);
+                cs_high(sd);
+            } else {
+                cs_low(sd);
+                if (send_cmd(sd, CMD18, addr) != 0x00) {
+                    result = SD_ERR_READ_CMD;
+                } else {
+                    result = SD_OK;
+                    for (uint32_t i = 0; i < count; i++) {
+                        result = read_data_block(sd, dst + (i * SD_BLOCK_SIZE));
+                        if (result != SD_OK) break;
+                    }
+                    (void)send_cmd(sd, CMD12, 0);
+                    if (wait_not_busy(sd) != SD_OK && result == SD_OK)
+                        result = SD_ERR_TIMEOUT;
+                }
+                cs_high(sd);
+            }
 
-    result = SD_OK;
-    for (uint32_t i = 0; i < count; i++) {
-        result = read_data_block(sd, dst + (i * SD_BLOCK_SIZE));
-        if (result != SD_OK) break;
-    }
+            if (result == SD_OK) return result;
+        }
 
-    /* CMD12 must be sent even if a block failed -- the card is still
-     * streaming and will keep driving the bus otherwise. */
-    (void)send_cmd(sd, CMD12, 0);
-    if (wait_not_busy(sd) != SD_OK && result == SD_OK) result = SD_ERR_TIMEOUT;
-
-out:
-    cs_high(sd);
-    return result;
+        return result;
 }

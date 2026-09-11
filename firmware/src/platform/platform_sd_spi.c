@@ -64,7 +64,7 @@ static void plat_sd_set_speed(void *ctx, sd_speed_t speed)
     (void)ctx;
     uint32_t mbr = (speed == SD_SPEED_INIT)
                  ? SPI_BAUDRATEPRESCALER_256   /* 96 MHz / 256 = 375 kHz */
-                 : SPI_BAUDRATEPRESCALER_4;    /* 96 MHz / 4   = 24 MHz  */
+                 : SPI_BAUDRATEPRESCALER_8;    /* 96 MHz / 4   = 24 MHz  */
 
     /* CFG1 is write-protected while the peripheral is enabled. Writing
      * it anyway is silently ignored — no HAL status, no error, the clock

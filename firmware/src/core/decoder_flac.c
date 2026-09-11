@@ -90,7 +90,7 @@ static drflac_bool32 flac_on_seek(void *ud, int offset, drflac_seek_origin org)
 
     /* dr_flac deliberately seeks past EOF while hunting for frames and
      * expects a clean failure, not a clamp. */
-    if (target < 0 || target > (int64_t)st->file_size) return DRFLAC_FALSE;
+    if (target < 0) return DRFLAC_FALSE;
 
     if (!st->owner->io.seek(st->owner->io.ctx, (uint32_t)target))
         return DRFLAC_FALSE;

@@ -36,6 +36,7 @@
 #include <string.h>
 #include "ff_gen_drv.h"
 #include "sd_spi.h"
+#include <stdio.h>
 
 /* Private typedef -----------------------------------------------------------*/
 /* Private define ------------------------------------------------------------*/
@@ -130,10 +131,14 @@ DRESULT USER_read (
     if (Stat & STA_NOINIT) return RES_NOTRDY;
 
     sd_err_t e = sd_read_blocks(&sd_card, (uint32_t)sector, buff, (uint32_t)count);
+    if (e != SD_OK) {
+        printf("sd: read_blocks err %d, sector %lu, count %lu, token 0x%02X\r\n",
+               (int)e, (unsigned long)sector, (unsigned long)count,
+               (unsigned)sd_last_bad_token);
+    }
     return (e == SD_OK) ? RES_OK : RES_ERROR;
-  /* USER CODE END READ */
-}
-
+    /* USER CODE END READ */
+  }
 /**
   * @brief  Writes Sector(s)
   * @param  pdrv: Physical drive number (0..)
