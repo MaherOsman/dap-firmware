@@ -69,6 +69,8 @@ const char *decoder_name(const decoder_t *d);
 
 extern const decoder_vtable_t decoder_wav_vt;
 extern const decoder_vtable_t decoder_flac_vt;
+extern const decoder_vtable_t decoder_mp3_vt;
+size_t decoder_mp3_arena_peak(const decoder_t *d);
 
 /* Peak bytes dr_flac took from the arena — for sizing DECODER_STATE_BYTES. */
 size_t decoder_flac_arena_peak(const decoder_t *d);
