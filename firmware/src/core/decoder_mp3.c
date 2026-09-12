@@ -41,7 +41,7 @@ static void *arena_malloc(size_t sz, void *ud)
     void *p = st->arena + st->arena_used;
     st->arena_used += aligned;
     if (st->arena_used > st->arena_peak) st->arena_peak = st->arena_used;
-        st->last_block = p;
+    st->last_block = p;
     return p;
 }
 
@@ -63,10 +63,9 @@ static void *arena_realloc(void *p, size_t sz, void *ud)
         return p;
     }
 
-    void *n = arena_malloc(sz, ud);
-    if (n && p) memcpy(n, p, sz);
-    return n;
-}
+    if (p != NULL) return NULL;
+        return arena_malloc(sz, ud);
+    }
 
 static void arena_free(void *p, void *ud) { (void)p; (void)ud; }
 

@@ -200,7 +200,7 @@ int main(void)
     }
 
     plat_audio_init(&hsai_BlockA1);
-    plat_audio_play("/Music/Chon/Chon - Grow/12 But.flac");
+    plat_audio_play("/Music/Oklou/Oklou - Galore (2020)/05 - galore.mp3");
 
     //if (plat_sai_start_tone(&hsai_BlockA1) != 0) {
        // printf("SAI: DMA transmit failed to start\r\n");
