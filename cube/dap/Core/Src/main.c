@@ -29,6 +29,7 @@
 #include "theme.h"
 #include "encoder.h"
 #include "library.h"
+#include "platform_library.h"
 #include <string.h>
 /* USER CODE END Includes */
 
@@ -196,6 +197,7 @@ int main(void)
         FRESULT fr = f_mount(&USERFatFS, USERPath, 1);   /* 1 = mount now */
         printf("f_mount: %d\r\n", fr);
         if (fr == FR_OK) {
+            dap_library_init(0);
         }
     }
 
