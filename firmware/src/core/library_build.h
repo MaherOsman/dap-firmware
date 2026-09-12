@@ -99,7 +99,7 @@ typedef struct {
 
     uint32_t build_id;
 
-    /* Hard limits. library_build_arena_bytes() turns these into a size. */
+    /* Hard limits. libidx_scan_arena_bytes() turns these into a size. */
     uint32_t max_tracks;
     uint32_t max_artists;
     uint32_t max_albums;
@@ -112,7 +112,7 @@ typedef struct {
      * LIB_PHASE_SCAN total is 0 because it is not knowable yet. */
     void (*progress)(void *ctx, int phase, uint32_t done, uint32_t total);
     void  *progress_ctx;
-} lib_build_cfg_t;
+} libidx_scan_cfg_t;
 
 typedef struct {
     uint32_t dirs_visited;
@@ -123,13 +123,13 @@ typedef struct {
     uint32_t skipped_not_audio;
     uint32_t skipped_path_too_long;
     uint32_t skipped_too_deep;
-} lib_build_stats_t;
+} libidx_scan_stats_t;
 
-uint32_t library_build_arena_bytes(const lib_build_cfg_t *cfg);
+uint32_t libidx_scan_arena_bytes(const libidx_scan_cfg_t *cfg);
 
 /* Builds the index. Returns LIB_OK, or LIB_E_FULL if a limit was hit (stats
  * still reflect what was counted), or LIB_E_IO / LIB_E_ARG.
  * On success the temp file is removed when the io backend supports unlink. */
-int library_build(const lib_build_cfg_t *cfg, lib_build_stats_t *stats);
+int libidx_scan(const libidx_scan_cfg_t *cfg, libidx_scan_stats_t *stats);
 
 #endif /* LIBRARY_BUILD_H */

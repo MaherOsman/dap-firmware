@@ -167,7 +167,7 @@ int lib_decode_header(const uint8_t *buf, lib_header_t *out)
 
 /* ---------------------------------------------------------------- arena */
 
-uint32_t library_arena_bytes(const lib_header_t *h)
+uint32_t libidx_arena_bytes(const lib_header_t *h)
 {
     return ALIGN4(h->artist_count * (uint32_t)sizeof(lib_artist_t))
          + ALIGN4(h->album_count  * (uint32_t)sizeof(lib_album_t))
@@ -177,7 +177,7 @@ uint32_t library_arena_bytes(const lib_header_t *h)
 
 /* ------------------------------------------------------------------ io */
 
-static int read_exact(library_t *lib, uint32_t off, void *dst, uint32_t len)
+static int read_exact(libidx_t *lib, uint32_t off, void *dst, uint32_t len)
 {
     uint32_t got = 0;
     int rc;
@@ -195,7 +195,7 @@ static int read_exact(library_t *lib, uint32_t off, void *dst, uint32_t len)
 
 /* Loads a table by streaming disk records through the page buffer and
  * decoding them, so no second scratch allocation is needed. */
-static int load_table(library_t *lib, uint32_t off, uint32_t count,
+static int load_table(libidx_t *lib, uint32_t off, uint32_t count,
                       uint32_t rec_size, int is_artist)
 {
     uint32_t per_batch = PAGE_BYTES / rec_size;
@@ -241,7 +241,7 @@ static int load_table(library_t *lib, uint32_t off, uint32_t count,
     return LIB_OK;
 }
 
-int library_open(library_t *lib, const lib_io_t *io, const char *path,
+int libidx_open(libidx_t *lib, const lib_io_t *io, const char *path,
                  void *arena, uint32_t arena_len)
 {
     uint8_t hdr_buf[LIB_HDR_SIZE];
@@ -269,7 +269,7 @@ int library_open(library_t *lib, const lib_io_t *io, const char *path,
     rc = lib_decode_header(hdr_buf, &lib->hdr);
     if (rc != LIB_OK) goto fail;
 
-    need = library_arena_bytes(&lib->hdr);
+    need = libidx_arena_bytes(&lib->hdr);
     if (need > arena_len) {
         lib->required_bytes = need;
         rc = LIB_E_NOMEM;
@@ -318,7 +318,7 @@ fail:
     return rc;
 }
 
-void library_close(library_t *lib)
+void libidx_close(libidx_t *lib)
 {
     if (lib && lib->fh && lib->io) {
         lib->io->close(lib->io->ctx, lib->fh);
@@ -333,34 +333,34 @@ void library_close(library_t *lib)
 
 /* ----------------------------------------------------------- accessors */
 
-uint32_t library_artist_count(const library_t *lib)
+uint32_t libidx_artist_count(const libidx_t *lib)
 {
     return (lib && lib->is_open) ? lib->hdr.artist_count : 0u;
 }
 
-uint32_t library_album_count(const library_t *lib)
+uint32_t libidx_album_count(const libidx_t *lib)
 {
     return (lib && lib->is_open) ? lib->hdr.album_count : 0u;
 }
 
-uint32_t library_track_count(const library_t *lib)
+uint32_t libidx_track_count(const libidx_t *lib)
 {
     return (lib && lib->is_open) ? lib->hdr.track_count : 0u;
 }
 
-const char *library_artist_name(const library_t *lib, uint32_t artist)
+const char *libidx_artist_name(const libidx_t *lib, uint32_t artist)
 {
     if (!lib || !lib->is_open || artist >= lib->hdr.artist_count) return "";
     return lib->strpool + lib->artists[artist].name_off;
 }
 
-uint32_t library_artist_album_count(const library_t *lib, uint32_t artist)
+uint32_t libidx_artist_album_count(const libidx_t *lib, uint32_t artist)
 {
     if (!lib || !lib->is_open || artist >= lib->hdr.artist_count) return 0u;
     return lib->artists[artist].album_count;
 }
 
-uint32_t library_artist_album(const library_t *lib, uint32_t artist, uint32_t n)
+uint32_t libidx_artist_album(const libidx_t *lib, uint32_t artist, uint32_t n)
 {
     if (!lib || !lib->is_open || artist >= lib->hdr.artist_count) {
         return 0xFFFFFFFFu;
@@ -369,13 +369,13 @@ uint32_t library_artist_album(const library_t *lib, uint32_t artist, uint32_t n)
     return lib->artists[artist].album_first + n;
 }
 
-const char *library_album_name(const library_t *lib, uint32_t album)
+const char *libidx_album_name(const libidx_t *lib, uint32_t album)
 {
     if (!lib || !lib->is_open || album >= lib->hdr.album_count) return "";
     return lib->strpool + lib->albums[album].name_off;
 }
 
-uint32_t library_album_artist(const library_t *lib, uint32_t album)
+uint32_t libidx_album_artist(const libidx_t *lib, uint32_t album)
 {
     if (!lib || !lib->is_open || album >= lib->hdr.album_count) {
         return 0xFFFFFFFFu;
@@ -383,7 +383,7 @@ uint32_t library_album_artist(const library_t *lib, uint32_t album)
     return lib->albums[album].artist_idx;
 }
 
-uint32_t library_album_track_count(const library_t *lib, uint32_t album)
+uint32_t libidx_album_track_count(const libidx_t *lib, uint32_t album)
 {
     if (!lib || !lib->is_open || album >= lib->hdr.album_count) return 0u;
     return lib->albums[album].track_count;
@@ -391,7 +391,7 @@ uint32_t library_album_track_count(const library_t *lib, uint32_t album)
 
 /* ----------------------------------------------------------- paged read */
 
-int library_track_global(library_t *lib, uint32_t track, lib_track_t *out)
+int libidx_track_global(libidx_t *lib, uint32_t track, lib_track_t *out)
 {
     uint32_t first, want, avail, bytes;
 
@@ -428,11 +428,11 @@ int library_track_global(library_t *lib, uint32_t track, lib_track_t *out)
     return LIB_OK;
 }
 
-int library_album_track(library_t *lib, uint32_t album, uint32_t n,
+int libidx_album_track(libidx_t *lib, uint32_t album, uint32_t n,
                         lib_track_t *out)
 {
     if (!lib || !lib->is_open || !out) return LIB_E_ARG;
     if (album >= lib->hdr.album_count) return LIB_E_RANGE;
     if (n >= lib->albums[album].track_count) return LIB_E_RANGE;
-    return library_track_global(lib, lib->albums[album].track_first + n, out);
+    return libidx_track_global(lib, lib->albums[album].track_first + n, out);
 }

@@ -87,7 +87,7 @@ enum {
     LIB_OK        =  0,
     LIB_E_IO      = -1,   /* backend reported failure or short read */
     LIB_E_FORMAT  = -2,   /* magic/version/size/bounds check failed */
-    LIB_E_NOMEM   = -3,   /* arena too small; see library_t.required_bytes */
+    LIB_E_NOMEM   = -3,   /* arena too small; see libidx_t.required_bytes */
     LIB_E_RANGE   = -4,   /* index out of range */
     LIB_E_ARG     = -5
 };
@@ -148,7 +148,7 @@ typedef struct {
 
     uint32_t        required_bytes; /* set on LIB_E_NOMEM */
     int             is_open;
-} library_t;
+} libidx_t;
 
 /* --- little-endian byte helpers (shared with the builder and the tests) --- */
 uint16_t lib_rd_u16(const uint8_t *p);
@@ -165,28 +165,28 @@ int  lib_decode_header(const uint8_t *buf, lib_header_t *out);
 void lib_encode_header(uint8_t *buf, const lib_header_t *in);
 
 /* Arena bytes needed to open an index with this header. */
-uint32_t library_arena_bytes(const lib_header_t *h);
+uint32_t libidx_arena_bytes(const lib_header_t *h);
 
 /* Opens `path`, validates the header, loads the resident tables into `arena`.
  * `arena` must be 4-byte aligned. On LIB_E_NOMEM, lib->required_bytes says how
  * much is needed and the file is left closed. */
-int  library_open(library_t *lib, const lib_io_t *io, const char *path,
+int  libidx_open(libidx_t *lib, const lib_io_t *io, const char *path,
                   void *arena, uint32_t arena_len);
-void library_close(library_t *lib);
+void libidx_close(libidx_t *lib);
 
-uint32_t    library_artist_count(const library_t *lib);
-const char *library_artist_name(const library_t *lib, uint32_t artist);
-uint32_t    library_album_count(const library_t *lib);                    /* total */
-uint32_t    library_artist_album_count(const library_t *lib, uint32_t artist);
+uint32_t    libidx_artist_count(const libidx_t *lib);
+const char *libidx_artist_name(const libidx_t *lib, uint32_t artist);
+uint32_t    libidx_album_count(const libidx_t *lib);                    /* total */
+uint32_t    libidx_artist_album_count(const libidx_t *lib, uint32_t artist);
 /* Album n of an artist -> global album index, or UINT32_MAX if out of range. */
-uint32_t    library_artist_album(const library_t *lib, uint32_t artist, uint32_t n);
-const char *library_album_name(const library_t *lib, uint32_t album);
-uint32_t    library_album_artist(const library_t *lib, uint32_t album);
-uint32_t    library_album_track_count(const library_t *lib, uint32_t album);
-uint32_t    library_track_count(const library_t *lib);                    /* total */
+uint32_t    libidx_artist_album(const libidx_t *lib, uint32_t artist, uint32_t n);
+const char *libidx_album_name(const libidx_t *lib, uint32_t album);
+uint32_t    libidx_album_artist(const libidx_t *lib, uint32_t album);
+uint32_t    libidx_album_track_count(const libidx_t *lib, uint32_t album);
+uint32_t    libidx_track_count(const libidx_t *lib);                    /* total */
 
 /* Paged reads. Both hit the page cache; a cache hit does no I/O. */
-int library_track_global(library_t *lib, uint32_t track, lib_track_t *out);
-int library_album_track(library_t *lib, uint32_t album, uint32_t n, lib_track_t *out);
+int libidx_track_global(libidx_t *lib, uint32_t track, lib_track_t *out);
+int libidx_album_track(libidx_t *lib, uint32_t album, uint32_t n, lib_track_t *out);
 
 #endif /* LIBRARY_INDEX_H */

@@ -194,8 +194,8 @@ typedef struct {
 } balb_t;
 
 typedef struct {
-    const lib_build_cfg_t *cfg;
-    lib_build_stats_t     *st;
+    const libidx_scan_cfg_t *cfg;
+    libidx_scan_stats_t     *st;
 
     bld_ent_t *ents;
     bart_t    *arts;
@@ -213,7 +213,7 @@ typedef struct {
     void *temp_fh;
 } bld_t;
 
-uint32_t library_build_arena_bytes(const lib_build_cfg_t *cfg)
+uint32_t libidx_scan_arena_bytes(const libidx_scan_cfg_t *cfg)
 {
     if (!cfg) return 0u;
     return ALIGN4(cfg->max_tracks  * (uint32_t)sizeof(bld_ent_t))
@@ -225,7 +225,7 @@ uint32_t library_build_arena_bytes(const lib_build_cfg_t *cfg)
          + LIB_TRACK_REC_SIZE;
 }
 
-static void carve(bld_t *b, const lib_build_cfg_t *cfg)
+static void carve(bld_t *b, const libidx_scan_cfg_t *cfg)
 {
     uint8_t *p = (uint8_t *)cfg->arena;
 
@@ -379,7 +379,7 @@ static void sort_ents(bld_t *b)
 
 static int add_track(bld_t *b, const char *path, uint32_t size)
 {
-    const lib_build_cfg_t *cfg = b->cfg;
+    const libidx_scan_cfg_t *cfg = b->cfg;
     lib_tags_t tags;
     lib_track_t t;
     uint32_t artist_id, album_id;
@@ -456,7 +456,7 @@ typedef struct {
 
 static int walk(bld_t *b)
 {
-    const lib_build_cfg_t *cfg = b->cfg;
+    const libidx_scan_cfg_t *cfg = b->cfg;
     lvl_t stack[LIB_BUILD_MAX_DEPTH];
     char path[LIB_PATH_MAX + 2];
     uint32_t depth = 0;
@@ -560,7 +560,7 @@ static int write_at(const lib_io_t *io, void *fh, const void *src, uint32_t n)
 
 static int emit(bld_t *b, void *out_fh)
 {
-    const lib_build_cfg_t *cfg = b->cfg;
+    const libidx_scan_cfg_t *cfg = b->cfg;
     const lib_io_t *io = cfg->io;
     lib_header_t hdr;
     uint8_t buf[LIB_HDR_SIZE];
@@ -675,10 +675,10 @@ static int emit(bld_t *b, void *out_fh)
 
 /* ===================================================================== */
 
-int library_build(const lib_build_cfg_t *cfg, lib_build_stats_t *stats)
+int libidx_scan(const libidx_scan_cfg_t *cfg, libidx_scan_stats_t *stats)
 {
     bld_t b;
-    lib_build_stats_t local;
+    libidx_scan_stats_t local;
     const char *index_path;
     const char *temp_path;
     void *out_fh = NULL;
@@ -694,7 +694,7 @@ int library_build(const lib_build_cfg_t *cfg, lib_build_stats_t *stats)
     if (!cfg->dir->opendir || !cfg->dir->readdir || !cfg->dir->closedir) {
         return LIB_E_ARG;
     }
-    if (cfg->arena_len < library_build_arena_bytes(cfg)) return LIB_E_NOMEM;
+    if (cfg->arena_len < libidx_scan_arena_bytes(cfg)) return LIB_E_NOMEM;
 
     index_path = cfg->index_path ? cfg->index_path : LIB_INDEX_PATH;
     temp_path  = cfg->temp_path  ? cfg->temp_path  : LIB_TEMP_PATH;

@@ -283,7 +283,7 @@ static const ftrack_t F_TR[] = {
 static uint8_t  g_arena[64u * 1024u];
 static ramio_t  g_ram;
 static lib_io_t g_io;
-static library_t g_lib;
+static libidx_t g_lib;
 static uint8_t *g_img;
 static uint32_t g_img_len;
 
@@ -302,7 +302,7 @@ static void fixture_load(void)
 static int fixture_open(void)
 {
     fixture_load();
-    return library_open(&g_lib, &g_io, LIB_INDEX_PATH, g_arena, sizeof(g_arena));
+    return libidx_open(&g_lib, &g_io, LIB_INDEX_PATH, g_arena, sizeof(g_arena));
 }
 
 /* =====================================================================
@@ -418,12 +418,12 @@ TEST(overlong_strings_truncate_rather_than_overrun)
 TEST(open_succeeds_and_reports_counts)
 {
     CHECK_EQ(fixture_open(), LIB_OK);
-    CHECK_EQ(library_artist_count(&g_lib), F_NAR);
-    CHECK_EQ(library_album_count(&g_lib), F_NAL);
-    CHECK_EQ(library_track_count(&g_lib), F_NTR);
+    CHECK_EQ(libidx_artist_count(&g_lib), F_NAR);
+    CHECK_EQ(libidx_album_count(&g_lib), F_NAL);
+    CHECK_EQ(libidx_track_count(&g_lib), F_NTR);
     CHECK_EQ(g_lib.hdr.build_id, 7u);
     CHECK_EQ(g_lib.hdr.total_size, g_img_len);
-    library_close(&g_lib);
+    libidx_close(&g_lib);
     CHECK_EQ(g_ram.close_calls, 1);
 }
 
@@ -432,7 +432,7 @@ TEST(arena_bytes_matches_what_open_consumes)
     uint32_t need;
 
     CHECK_EQ(fixture_open(), LIB_OK);
-    need = library_arena_bytes(&g_lib.hdr);
+    need = libidx_arena_bytes(&g_lib.hdr);
 
     /* tables + pool + one page cache, nothing more */
     CHECK(need >= F_NAR * sizeof(lib_artist_t) + F_NAL * sizeof(lib_album_t)
@@ -443,7 +443,7 @@ TEST(arena_bytes_matches_what_open_consumes)
     CHECK((uint8_t *)g_lib.artists >= g_arena);
     CHECK((uint8_t *)g_lib.page + LIB_PAGE_TRACKS * LIB_TRACK_REC_SIZE
               <= g_arena + need);
-    library_close(&g_lib);
+    libidx_close(&g_lib);
 }
 
 TEST(arena_too_small_is_refused_with_a_size)
@@ -452,23 +452,23 @@ TEST(arena_too_small_is_refused_with_a_size)
     int rc;
 
     fixture_load();
-    rc = library_open(&g_lib, &g_io, LIB_INDEX_PATH, g_arena, 64u);
+    rc = libidx_open(&g_lib, &g_io, LIB_INDEX_PATH, g_arena, 64u);
     CHECK_EQ(rc, LIB_E_NOMEM);
     CHECK(g_lib.required_bytes > 64u);
     CHECK_EQ(g_lib.is_open, 0);
     CHECK_EQ(g_ram.close_calls, 1);   /* the file was not left open */
 
     need = g_lib.required_bytes;
-    rc = library_open(&g_lib, &g_io, LIB_INDEX_PATH, g_arena, need);
+    rc = libidx_open(&g_lib, &g_io, LIB_INDEX_PATH, g_arena, need);
     CHECK_EQ(rc, LIB_OK);             /* exactly the reported size is enough */
-    library_close(&g_lib);
+    libidx_close(&g_lib);
 }
 
 TEST(open_failure_is_reported)
 {
     fixture_load();
     g_ram.fail_open = 1;
-    CHECK_EQ(library_open(&g_lib, &g_io, LIB_INDEX_PATH, g_arena, sizeof(g_arena)),
+    CHECK_EQ(libidx_open(&g_lib, &g_io, LIB_INDEX_PATH, g_arena, sizeof(g_arena)),
              LIB_E_IO);
     CHECK_EQ(g_lib.is_open, 0);
 }
@@ -477,7 +477,7 @@ TEST(short_read_during_open_is_an_error_not_a_partial_load)
 {
     fixture_load();
     g_ram.short_read = 1;
-    CHECK_EQ(library_open(&g_lib, &g_io, LIB_INDEX_PATH, g_arena, sizeof(g_arena)),
+    CHECK_EQ(libidx_open(&g_lib, &g_io, LIB_INDEX_PATH, g_arena, sizeof(g_arena)),
              LIB_E_IO);
     CHECK_EQ(g_lib.is_open, 0);
     CHECK_EQ(g_ram.close_calls, 1);
@@ -487,7 +487,7 @@ TEST(read_failure_during_open_closes_the_file)
 {
     fixture_load();
     g_ram.reads_until_fail = 0;
-    CHECK_EQ(library_open(&g_lib, &g_io, LIB_INDEX_PATH, g_arena, sizeof(g_arena)),
+    CHECK_EQ(libidx_open(&g_lib, &g_io, LIB_INDEX_PATH, g_arena, sizeof(g_arena)),
              LIB_E_IO);
     CHECK_EQ(g_ram.close_calls, 1);
     CHECK_EQ(g_ram.is_open, 0);
@@ -497,7 +497,7 @@ TEST(truncated_file_is_rejected)
 {
     fixture_load();
     g_ram.len = 32u;   /* less than a header */
-    CHECK_EQ(library_open(&g_lib, &g_io, LIB_INDEX_PATH, g_arena, sizeof(g_arena)),
+    CHECK_EQ(libidx_open(&g_lib, &g_io, LIB_INDEX_PATH, g_arena, sizeof(g_arena)),
              LIB_E_IO);
 }
 
@@ -510,7 +510,7 @@ static void expect_header_reject(uint32_t off, uint32_t value, int expect)
 {
     fixture_load();
     put_u32(g_img + off, value);
-    CHECK_EQ(library_open(&g_lib, &g_io, LIB_INDEX_PATH, g_arena, sizeof(g_arena)),
+    CHECK_EQ(libidx_open(&g_lib, &g_io, LIB_INDEX_PATH, g_arena, sizeof(g_arena)),
              expect);
     CHECK_EQ(g_lib.is_open, 0);
 }
@@ -519,12 +519,12 @@ TEST(bad_magic_is_rejected)
 {
     fixture_load();
     g_img[0] = 'X';
-    CHECK_EQ(library_open(&g_lib, &g_io, LIB_INDEX_PATH, g_arena, sizeof(g_arena)),
+    CHECK_EQ(libidx_open(&g_lib, &g_io, LIB_INDEX_PATH, g_arena, sizeof(g_arena)),
              LIB_E_FORMAT);
 
     fixture_load();
     g_img[7] = '9';
-    CHECK_EQ(library_open(&g_lib, &g_io, LIB_INDEX_PATH, g_arena, sizeof(g_arena)),
+    CHECK_EQ(libidx_open(&g_lib, &g_io, LIB_INDEX_PATH, g_arena, sizeof(g_arena)),
              LIB_E_FORMAT);
 }
 
@@ -564,7 +564,7 @@ TEST(unterminated_string_pool_is_rejected)
     fixture_load();
     pool_off = lib_rd_u32(g_img + 32);
     g_img[pool_off + lib_rd_u32(g_img + 36) - 1u] = 'z';
-    CHECK_EQ(library_open(&g_lib, &g_io, LIB_INDEX_PATH, g_arena, sizeof(g_arena)),
+    CHECK_EQ(libidx_open(&g_lib, &g_io, LIB_INDEX_PATH, g_arena, sizeof(g_arena)),
              LIB_E_FORMAT);
 }
 
@@ -572,7 +572,7 @@ TEST(out_of_pool_name_offset_is_rejected)
 {
     fixture_load();
     put_u32(g_img + LIB_HDR_SIZE + 0, 99999u);   /* artist 0 name_off */
-    CHECK_EQ(library_open(&g_lib, &g_io, LIB_INDEX_PATH, g_arena, sizeof(g_arena)),
+    CHECK_EQ(libidx_open(&g_lib, &g_io, LIB_INDEX_PATH, g_arena, sizeof(g_arena)),
              LIB_E_FORMAT);
 }
 
@@ -583,13 +583,13 @@ TEST(album_range_outside_the_track_table_is_rejected)
     fixture_load();
     album_off = lib_rd_u32(g_img + 28);
     put_u32(g_img + album_off + 12, 9999u);      /* album 0 track_count */
-    CHECK_EQ(library_open(&g_lib, &g_io, LIB_INDEX_PATH, g_arena, sizeof(g_arena)),
+    CHECK_EQ(libidx_open(&g_lib, &g_io, LIB_INDEX_PATH, g_arena, sizeof(g_arena)),
              LIB_E_FORMAT);
 
     fixture_load();
     album_off = lib_rd_u32(g_img + 28);
     put_u32(g_img + album_off + 4, 77u);         /* album 0 artist_idx */
-    CHECK_EQ(library_open(&g_lib, &g_io, LIB_INDEX_PATH, g_arena, sizeof(g_arena)),
+    CHECK_EQ(libidx_open(&g_lib, &g_io, LIB_INDEX_PATH, g_arena, sizeof(g_arena)),
              LIB_E_FORMAT);
 }
 
@@ -597,7 +597,7 @@ TEST(artist_album_range_must_be_inside_the_album_table)
 {
     fixture_load();
     put_u32(g_img + LIB_HDR_SIZE + 8, 50u);      /* artist 0 album_count */
-    CHECK_EQ(library_open(&g_lib, &g_io, LIB_INDEX_PATH, g_arena, sizeof(g_arena)),
+    CHECK_EQ(libidx_open(&g_lib, &g_io, LIB_INDEX_PATH, g_arena, sizeof(g_arena)),
              LIB_E_FORMAT);
 }
 
@@ -608,9 +608,9 @@ TEST(artist_album_range_must_be_inside_the_album_table)
 TEST(artist_names_come_back)
 {
     CHECK_EQ(fixture_open(), LIB_OK);
-    CHECK(strcmp(library_artist_name(&g_lib, 0u), "Aphex Twin") == 0);
-    CHECK(strcmp(library_artist_name(&g_lib, 1u), "Boards of Canada") == 0);
-    library_close(&g_lib);
+    CHECK(strcmp(libidx_artist_name(&g_lib, 0u), "Aphex Twin") == 0);
+    CHECK(strcmp(libidx_artist_name(&g_lib, 1u), "Boards of Canada") == 0);
+    libidx_close(&g_lib);
 }
 
 TEST(albums_are_grouped_under_their_artist)
@@ -619,40 +619,40 @@ TEST(albums_are_grouped_under_their_artist)
 
     CHECK_EQ(fixture_open(), LIB_OK);
 
-    CHECK_EQ(library_artist_album_count(&g_lib, 0u), 2u);
-    CHECK_EQ(library_artist_album_count(&g_lib, 1u), 1u);
+    CHECK_EQ(libidx_artist_album_count(&g_lib, 0u), 2u);
+    CHECK_EQ(libidx_artist_album_count(&g_lib, 1u), 1u);
 
-    a = library_artist_album(&g_lib, 0u, 0u);
+    a = libidx_artist_album(&g_lib, 0u, 0u);
     CHECK_EQ(a, 0u);
-    CHECK(strcmp(library_album_name(&g_lib, a), "Drukqs") == 0);
-    CHECK_EQ(library_album_artist(&g_lib, a), 0u);
-    CHECK_EQ(library_album_track_count(&g_lib, a), 4u);
+    CHECK(strcmp(libidx_album_name(&g_lib, a), "Drukqs") == 0);
+    CHECK_EQ(libidx_album_artist(&g_lib, a), 0u);
+    CHECK_EQ(libidx_album_track_count(&g_lib, a), 4u);
 
-    a = library_artist_album(&g_lib, 0u, 1u);
+    a = libidx_artist_album(&g_lib, 0u, 1u);
     CHECK_EQ(a, 1u);
-    CHECK(strcmp(library_album_name(&g_lib, a), "SAW II") == 0);
+    CHECK(strcmp(libidx_album_name(&g_lib, a), "SAW II") == 0);
 
-    a = library_artist_album(&g_lib, 1u, 0u);
+    a = libidx_artist_album(&g_lib, 1u, 0u);
     CHECK_EQ(a, 2u);
-    CHECK(strcmp(library_album_name(&g_lib, a), "Geogaddi") == 0);
-    CHECK_EQ(library_album_artist(&g_lib, a), 1u);
+    CHECK(strcmp(libidx_album_name(&g_lib, a), "Geogaddi") == 0);
+    CHECK_EQ(libidx_album_artist(&g_lib, a), 1u);
 
-    library_close(&g_lib);
+    libidx_close(&g_lib);
 }
 
 TEST(out_of_range_navigation_is_safe)
 {
     CHECK_EQ(fixture_open(), LIB_OK);
 
-    CHECK(strcmp(library_artist_name(&g_lib, 99u), "") == 0);
-    CHECK(strcmp(library_album_name(&g_lib, 99u), "") == 0);
-    CHECK_EQ(library_artist_album_count(&g_lib, 99u), 0u);
-    CHECK_EQ(library_artist_album(&g_lib, 0u, 9u), 0xFFFFFFFFu);
-    CHECK_EQ(library_artist_album(&g_lib, 99u, 0u), 0xFFFFFFFFu);
-    CHECK_EQ(library_album_track_count(&g_lib, 99u), 0u);
-    CHECK_EQ(library_album_artist(&g_lib, 99u), 0xFFFFFFFFu);
+    CHECK(strcmp(libidx_artist_name(&g_lib, 99u), "") == 0);
+    CHECK(strcmp(libidx_album_name(&g_lib, 99u), "") == 0);
+    CHECK_EQ(libidx_artist_album_count(&g_lib, 99u), 0u);
+    CHECK_EQ(libidx_artist_album(&g_lib, 0u, 9u), 0xFFFFFFFFu);
+    CHECK_EQ(libidx_artist_album(&g_lib, 99u, 0u), 0xFFFFFFFFu);
+    CHECK_EQ(libidx_album_track_count(&g_lib, 99u), 0u);
+    CHECK_EQ(libidx_album_artist(&g_lib, 99u), 0xFFFFFFFFu);
 
-    library_close(&g_lib);
+    libidx_close(&g_lib);
 }
 
 TEST(accessors_on_a_closed_library_are_safe)
@@ -660,14 +660,14 @@ TEST(accessors_on_a_closed_library_are_safe)
     lib_track_t t;
 
     CHECK_EQ(fixture_open(), LIB_OK);
-    library_close(&g_lib);
+    libidx_close(&g_lib);
 
-    CHECK_EQ(library_artist_count(&g_lib), 0u);
-    CHECK_EQ(library_album_count(&g_lib), 0u);
-    CHECK_EQ(library_track_count(&g_lib), 0u);
-    CHECK(strcmp(library_artist_name(&g_lib, 0u), "") == 0);
-    CHECK_EQ(library_track_global(&g_lib, 0u, &t), LIB_E_ARG);
-    CHECK_EQ(library_album_track(&g_lib, 0u, 0u, &t), LIB_E_ARG);
+    CHECK_EQ(libidx_artist_count(&g_lib), 0u);
+    CHECK_EQ(libidx_album_count(&g_lib), 0u);
+    CHECK_EQ(libidx_track_count(&g_lib), 0u);
+    CHECK(strcmp(libidx_artist_name(&g_lib, 0u), "") == 0);
+    CHECK_EQ(libidx_track_global(&g_lib, 0u, &t), LIB_E_ARG);
+    CHECK_EQ(libidx_album_track(&g_lib, 0u, 0u, &t), LIB_E_ARG);
 }
 
 /* =====================================================================
@@ -682,7 +682,7 @@ TEST(track_fields_survive_the_round_trip)
     CHECK_EQ(fixture_open(), LIB_OK);
 
     for (i = 0; i < F_NTR; i++) {
-        CHECK_EQ(library_track_global(&g_lib, i, &t), LIB_OK);
+        CHECK_EQ(libidx_track_global(&g_lib, i, &t), LIB_OK);
         CHECK_EQ(t.album_idx, F_TR[i].album);
         CHECK_EQ(t.duration_ms, F_TR[i].dur_ms);
         CHECK_EQ(t.file_size, F_TR[i].size);
@@ -692,7 +692,7 @@ TEST(track_fields_survive_the_round_trip)
         CHECK(strcmp(t.path, F_TR[i].path) == 0);
     }
 
-    library_close(&g_lib);
+    libidx_close(&g_lib);
 }
 
 TEST(album_relative_indexing_hits_the_right_track)
@@ -701,18 +701,18 @@ TEST(album_relative_indexing_hits_the_right_track)
 
     CHECK_EQ(fixture_open(), LIB_OK);
 
-    CHECK_EQ(library_album_track(&g_lib, 0u, 0u, &t), LIB_OK);
+    CHECK_EQ(libidx_album_track(&g_lib, 0u, 0u, &t), LIB_OK);
     CHECK(strcmp(t.title, "Jynweythek") == 0);
 
-    CHECK_EQ(library_album_track(&g_lib, 1u, 0u, &t), LIB_OK);
+    CHECK_EQ(libidx_album_track(&g_lib, 1u, 0u, &t), LIB_OK);
     CHECK(strcmp(t.title, "Untitled 1") == 0);
     CHECK_EQ(t.album_idx, 1u);
 
-    CHECK_EQ(library_album_track(&g_lib, 2u, 3u, &t), LIB_OK);
+    CHECK_EQ(libidx_album_track(&g_lib, 2u, 3u, &t), LIB_OK);
     CHECK(strcmp(t.title, "Gyroscope") == 0);
     CHECK_EQ(t.track_no, 4u);
 
-    library_close(&g_lib);
+    libidx_close(&g_lib);
 }
 
 TEST(track_index_out_of_range_is_rejected)
@@ -721,13 +721,13 @@ TEST(track_index_out_of_range_is_rejected)
 
     CHECK_EQ(fixture_open(), LIB_OK);
 
-    CHECK_EQ(library_track_global(&g_lib, F_NTR, &t), LIB_E_RANGE);
-    CHECK_EQ(library_track_global(&g_lib, 0xFFFFFFFFu, &t), LIB_E_RANGE);
-    CHECK_EQ(library_album_track(&g_lib, 0u, 4u, &t), LIB_E_RANGE);
-    CHECK_EQ(library_album_track(&g_lib, 9u, 0u, &t), LIB_E_RANGE);
-    CHECK_EQ(library_track_global(&g_lib, 0u, NULL), LIB_E_ARG);
+    CHECK_EQ(libidx_track_global(&g_lib, F_NTR, &t), LIB_E_RANGE);
+    CHECK_EQ(libidx_track_global(&g_lib, 0xFFFFFFFFu, &t), LIB_E_RANGE);
+    CHECK_EQ(libidx_album_track(&g_lib, 0u, 4u, &t), LIB_E_RANGE);
+    CHECK_EQ(libidx_album_track(&g_lib, 9u, 0u, &t), LIB_E_RANGE);
+    CHECK_EQ(libidx_track_global(&g_lib, 0u, NULL), LIB_E_ARG);
 
-    library_close(&g_lib);
+    libidx_close(&g_lib);
 }
 
 TEST(reading_the_same_page_twice_does_no_io)
@@ -737,23 +737,23 @@ TEST(reading_the_same_page_twice_does_no_io)
 
     CHECK_EQ(fixture_open(), LIB_OK);
 
-    CHECK_EQ(library_track_global(&g_lib, 0u, &t), LIB_OK);
+    CHECK_EQ(libidx_track_global(&g_lib, 0u, &t), LIB_OK);
     reads = g_ram.read_calls;
 
     /* tracks 1..7 share page 0 with track 0 */
-    CHECK_EQ(library_track_global(&g_lib, 1u, &t), LIB_OK);
+    CHECK_EQ(libidx_track_global(&g_lib, 1u, &t), LIB_OK);
     CHECK(strcmp(t.title, "Vordhosbn") == 0);
-    CHECK_EQ(library_track_global(&g_lib, 7u, &t), LIB_OK);
+    CHECK_EQ(libidx_track_global(&g_lib, 7u, &t), LIB_OK);
     CHECK(strcmp(t.title, "Music Is Math") == 0);
-    CHECK_EQ(library_track_global(&g_lib, 0u, &t), LIB_OK);
+    CHECK_EQ(libidx_track_global(&g_lib, 0u, &t), LIB_OK);
 
     CHECK_EQ(g_ram.read_calls, reads);
 
     /* track 8 is on the next page */
-    CHECK_EQ(library_track_global(&g_lib, 8u, &t), LIB_OK);
+    CHECK_EQ(libidx_track_global(&g_lib, 8u, &t), LIB_OK);
     CHECK_EQ(g_ram.read_calls, reads + 1);
 
-    library_close(&g_lib);
+    libidx_close(&g_lib);
 }
 
 TEST(the_last_partial_page_reads_only_what_exists)
@@ -764,12 +764,12 @@ TEST(the_last_partial_page_reads_only_what_exists)
 
     /* 10 tracks, page size 8 -> page 1 holds 2 records, and the read must not
      * run off the end of the file */
-    CHECK_EQ(library_track_global(&g_lib, 9u, &t), LIB_OK);
+    CHECK_EQ(libidx_track_global(&g_lib, 9u, &t), LIB_OK);
     CHECK(strcmp(t.title, "Gyroscope") == 0);
     CHECK_EQ(g_lib.page_first, 8u);
     CHECK_EQ(g_lib.page_n, 2u);
 
-    library_close(&g_lib);
+    libidx_close(&g_lib);
 }
 
 TEST(a_failed_page_read_invalidates_the_cache)
@@ -778,17 +778,17 @@ TEST(a_failed_page_read_invalidates_the_cache)
 
     CHECK_EQ(fixture_open(), LIB_OK);
 
-    CHECK_EQ(library_track_global(&g_lib, 0u, &t), LIB_OK);
+    CHECK_EQ(libidx_track_global(&g_lib, 0u, &t), LIB_OK);
     g_ram.reads_until_fail = 0;
-    CHECK_EQ(library_track_global(&g_lib, 8u, &t), LIB_E_IO);
+    CHECK_EQ(libidx_track_global(&g_lib, 8u, &t), LIB_E_IO);
     CHECK_EQ(g_lib.page_n, 0u);
 
     /* recovering: a later successful read must refill, not trust stale bytes */
     g_ram.reads_until_fail = -1;
-    CHECK_EQ(library_track_global(&g_lib, 0u, &t), LIB_OK);
+    CHECK_EQ(libidx_track_global(&g_lib, 0u, &t), LIB_OK);
     CHECK(strcmp(t.title, "Jynweythek") == 0);
 
-    library_close(&g_lib);
+    libidx_close(&g_lib);
 }
 
 /* =====================================================================
@@ -810,7 +810,7 @@ TEST(a_three_thousand_track_library_stays_small_in_ram)
     uint32_t len, i, need;
     ramio_t ram;
     lib_io_t io;
-    library_t lib;
+    libidx_t lib;
     lib_track_t t;
     int reads;
 
@@ -847,10 +847,10 @@ TEST(a_three_thousand_track_library_stays_small_in_ram)
     ram.reads_until_fail = -1;
     io = make_io(&ram);
 
-    CHECK_EQ(library_open(&lib, &io, LIB_INDEX_PATH, arena, sizeof(arena)),
+    CHECK_EQ(libidx_open(&lib, &io, LIB_INDEX_PATH, arena, sizeof(arena)),
              LIB_OK);
 
-    need = library_arena_bytes(&lib.hdr);
+    need = libidx_arena_bytes(&lib.hdr);
     /* the whole point: ~1 MB of index, but RAM stays under 20 KB */
     CHECK(len > 900000u);
     CHECK(need < 20u * 1024u);
@@ -860,15 +860,15 @@ TEST(a_three_thousand_track_library_stays_small_in_ram)
 
     /* random access anywhere costs one page read */
     reads = ram.read_calls;
-    CHECK_EQ(library_track_global(&lib, 2999u, &t), LIB_OK);
+    CHECK_EQ(libidx_track_global(&lib, 2999u, &t), LIB_OK);
     CHECK(strcmp(t.title, "Track 2999") == 0);
     CHECK_EQ(ram.read_calls, reads + 1);
 
-    CHECK_EQ(library_album_track(&lib, 299u, 9u, &t), LIB_OK);
+    CHECK_EQ(libidx_album_track(&lib, 299u, 9u, &t), LIB_OK);
     CHECK_EQ(t.album_idx, 299u);
     CHECK_EQ(t.track_no, 10u);
 
-    CHECK_EQ(library_track_global(&lib, 0u, &t), LIB_OK);
+    CHECK_EQ(libidx_track_global(&lib, 0u, &t), LIB_OK);
     CHECK(strcmp(t.title, "Track 0000") == 0);
 
     /* a full sequential walk costs exactly one read per page */
@@ -876,11 +876,11 @@ TEST(a_three_thousand_track_library_stays_small_in_ram)
     lib.page_first = 0xFFFFFFFFu;
     lib.page_n = 0;
     for (i = 0; i < N_TR; i++) {
-        CHECK_EQ(library_track_global(&lib, i, &t), LIB_OK);
+        CHECK_EQ(libidx_track_global(&lib, i, &t), LIB_OK);
     }
     CHECK_EQ(ram.read_calls, (int)(N_TR / LIB_PAGE_TRACKS));
 
-    library_close(&lib);
+    libidx_close(&lib);
     free(img);
 }
 
@@ -890,7 +890,7 @@ TEST(an_empty_library_opens_cleanly)
     uint32_t len;
     ramio_t ram;
     lib_io_t io;
-    library_t lib;
+    libidx_t lib;
     lib_track_t t;
 
     img = build_image(NULL, 0u, NULL, 0u, NULL, 0u, &len);
@@ -900,18 +900,18 @@ TEST(an_empty_library_opens_cleanly)
     ram.reads_until_fail = -1;
     io = make_io(&ram);
 
-    CHECK_EQ(library_open(&lib, &io, LIB_INDEX_PATH, g_arena, sizeof(g_arena)),
+    CHECK_EQ(libidx_open(&lib, &io, LIB_INDEX_PATH, g_arena, sizeof(g_arena)),
              LIB_OK);
-    CHECK_EQ(library_artist_count(&lib), 0u);
-    CHECK_EQ(library_track_count(&lib), 0u);
-    CHECK_EQ(library_track_global(&lib, 0u, &t), LIB_E_RANGE);
-    library_close(&lib);
+    CHECK_EQ(libidx_artist_count(&lib), 0u);
+    CHECK_EQ(libidx_track_count(&lib), 0u);
+    CHECK_EQ(libidx_track_global(&lib, 0u, &t), LIB_E_RANGE);
+    libidx_close(&lib);
     free(img);
 }
 
 int main(void)
 {
-    printf("library_index\n");
+    printf("libidx_index\n");
 
     RUN(le_helpers_roundtrip);
     RUN(track_record_roundtrips_through_the_codec);
