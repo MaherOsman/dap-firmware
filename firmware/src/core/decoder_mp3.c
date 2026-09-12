@@ -24,6 +24,7 @@ typedef struct {
     int16_t    scratch[MP3_SCRATCH_FRAMES * 2];
     size_t     arena_used;
     size_t     arena_peak;
+    void      *last_block;
     uint8_t    arena[24576];
 } mp3_state_t;
 
@@ -40,11 +41,28 @@ static void *arena_malloc(size_t sz, void *ud)
     void *p = st->arena + st->arena_used;
     st->arena_used += aligned;
     if (st->arena_used > st->arena_peak) st->arena_peak = st->arena_used;
+        st->last_block = p;
     return p;
 }
 
 static void *arena_realloc(void *p, size_t sz, void *ud)
 {
+    mp3_state_t *st = (mp3_state_t *)ud;
+    size_t aligned = (sz + 7u) & ~(size_t)7u;
+
+    /* dr_mp3 grows its read buffer as it goes, and the block being grown
+     * is always the most recent allocation. Extending in place costs
+     * nothing and avoids stranding the old one — with a bump allocator
+     * that never frees, copying instead exhausts the arena partway
+     * through a track and playback stops. */
+    if (p != NULL && st->last_block == p) {
+        size_t base = (size_t)((uint8_t *)p - st->arena);
+        if (base + aligned > sizeof st->arena) return NULL;
+        st->arena_used = base + aligned;
+        if (st->arena_used > st->arena_peak) st->arena_peak = st->arena_used;
+        return p;
+    }
+
     void *n = arena_malloc(sz, ud);
     if (n && p) memcpy(n, p, sz);
     return n;
