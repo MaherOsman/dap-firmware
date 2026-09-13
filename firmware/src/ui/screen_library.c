@@ -59,9 +59,10 @@ static void draw_chevron(gfx_t *g, int x, int y, int size, color_t c)
     }
 }
 
-void screen_library_draw(gfx_t *g, const theme_t *t, const lib_row_t *rows,
-                         int row_count, int selected, int scroll_top,
-                         const char *header, lib_level_t level)
+void screen_library_draw_window(gfx_t *g, const theme_t *t,
+                                const lib_row_t *rows, int window_count,
+                                int total_count, int selected, int scroll_top,
+                                const char *header, lib_level_t level)
 {
     gfx_clip_reset(g);
     gfx_clear(g, t->bg);
@@ -89,14 +90,20 @@ void screen_library_draw(gfx_t *g, const theme_t *t, const lib_row_t *rows,
 
     gfx_clip(g, 0, LIB_LIST_TOP, SCREEN_W, LIB_LIST_BOT - LIB_LIST_TOP);
 
-    for (int i = scroll_top; i < row_count; i++) {
+    /* `i` stays absolute so `selected` and `scroll_top` keep the meaning they
+     * have everywhere else; `rows` is indexed relative to the window, because
+     * a paged library only ever materialises the visible slice. Conflating
+     * the two is the desync lib_clamp_scroll's comment warns about. */
+    for (int i = scroll_top; i < scroll_top + window_count; i++) {
+        const lib_row_t *row = &rows[i - scroll_top];
+
         int row_y = LIB_LIST_TOP + (i - scroll_top) * LIB_ROW_H;
         if (row_y + LIB_ROW_H > LIB_LIST_BOT) {
             break;
         }
 
         bool is_sel     = (i == selected);
-        bool is_current = rows[i].is_current;
+        bool is_current = row->is_current;
 
         if (is_sel) {
             gfx_fill_rect(g, 0, row_y, SCREEN_W, LIB_ROW_H, t->accent_dim);
@@ -105,36 +112,39 @@ void screen_library_draw(gfx_t *g, const theme_t *t, const lib_row_t *rows,
         int text_x  = MARGIN + text_indent;
         int text_y  = row_y + (LIB_ROW_H - font_sm.height) / 2;
 
-        if (rows[i].has_sub) {
+        if (row->has_sub) {
             color_t cc = is_sel ? t->text_primary : t->text_inactive;
             draw_chevron(g, SCREEN_W - chevron_w - MARGIN,
                          row_y + (LIB_ROW_H - 7) / 2, 4, cc);
         }
 
-        if (!rows[i].has_sub && is_current) {
+        if (!row->has_sub && is_current) {
             draw_play_marker(g, text_x, row_y + (LIB_ROW_H - 9) / 2, 5,
                              t->accent);
             text_x += 12;
         }
 
         int avail_w = SCREEN_W - text_x - MARGIN
-                      - (rows[i].has_sub ? chevron_w + MARGIN : 0);
+                      - (row->has_sub ? chevron_w + MARGIN : 0);
 
         color_t text_col = is_sel     ? t->text_primary
                            : is_current ? t->accent
                                         : t->text_secondary;
 
-        gfx_text_ellipsis(g, &font_sm, rows[i].text ? rows[i].text : "",
+        gfx_text_ellipsis(g, &font_sm, row->text ? row->text : "",
                           text_x, text_y, avail_w, text_col);
     }
 
     gfx_clip_reset(g);
 
     /* ---- scrollbar ---- */
-    if (row_count > LIB_VISIBLE) {
+    /* Sized against the level's true length, not the window: a window is
+     * always LIB_VISIBLE rows, so using it here would draw a full-height
+     * bar on a 3000-track album. */
+    if (total_count > LIB_VISIBLE) {
         int track_h = LIB_LIST_BOT - LIB_LIST_TOP;
-        int bar_h   = track_h * LIB_VISIBLE / row_count;
-        int bar_y   = LIB_LIST_TOP + track_h * scroll_top / row_count;
+        int bar_h   = track_h * LIB_VISIBLE / total_count;
+        int bar_y   = LIB_LIST_TOP + track_h * scroll_top / total_count;
         if (bar_h < 8) {
             bar_h = 8; /* stays visible on a very long library */
         }
@@ -152,4 +162,17 @@ void screen_library_draw(gfx_t *g, const theme_t *t, const lib_row_t *rows,
     int hint_y = LIB_LIST_BOT + (LIB_HINT_H - font_sm.height) / 2 + 1;
     gfx_text_centered(g, &font_sm, hint, 0, hint_y, SCREEN_W,
                       t->text_inactive);
+}
+
+void screen_library_draw(gfx_t *g, const theme_t *t, const lib_row_t *rows,
+                         int row_count, int selected, int scroll_top,
+                         const char *header, lib_level_t level)
+{
+    /* The whole array, viewed as a window starting at scroll_top. */
+    int n = row_count - scroll_top;
+    if (n < 0) {
+        n = 0;
+    }
+    screen_library_draw_window(g, t, rows + scroll_top, n, row_count,
+                               selected, scroll_top, header, level);
 }

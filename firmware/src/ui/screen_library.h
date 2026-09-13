@@ -27,6 +27,20 @@ typedef struct {
     bool        is_current;  /* contains or is the playing track */
 } lib_row_t;
 
+/*
+ * Draws a window of rows rather than the whole level: rows[0] is the row at
+ * scroll_top, window_count is how many are supplied, total_count is how many
+ * exist at this level (the scrollbar needs the true total). `selected` stays
+ * absolute. This is what a paged library uses — it never materialises a row
+ * per track.
+ */
+void screen_library_draw_window(gfx_t *g, const theme_t *t,
+                                const lib_row_t *rows, int window_count,
+                                int total_count, int selected, int scroll_top,
+                                const char *header, lib_level_t level);
+
+/* Draws rows[0..row_count) indexed absolutely. Equivalent to passing the
+ * whole array as the window. */
 void screen_library_draw(gfx_t *g, const theme_t *t, const lib_row_t *rows,
                          int row_count, int selected, int scroll_top,
                          const char *header, lib_level_t level);
