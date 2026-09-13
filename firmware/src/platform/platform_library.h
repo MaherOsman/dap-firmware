@@ -15,10 +15,10 @@
 
 /* Bump this to force a rescan on the next boot without deleting the file:
  * the stored build_id is compared against it. */
-#define DAP_INDEX_BUILD_ID  1u
+#define DAP_INDEX_BUILD_ID  2u
 
 /* Folder to scan. "/" walks the whole card. */
-#define DAP_MUSIC_ROOT      "/"
+#define DAP_MUSIC_ROOT      "/Music"
 
 /* force_rescan != 0 always rebuilds, even if a current index exists.
  * Returns LIB_OK when the library is open and usable. */
