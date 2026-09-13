@@ -112,6 +112,15 @@ typedef struct {
      * LIB_PHASE_SCAN total is 0 because it is not knowable yet. */
     void (*progress)(void *ctx, int phase, uint32_t done, uint32_t total);
     void  *progress_ctx;
+
+    /* Optional. Called for every directory or file the scan declines to
+     * index, with the path and a short reason. Without this a skipped
+     * subtree is invisible: the scan still returns LIB_OK and simply
+     * reports fewer tracks than the card holds. The platform layer is
+     * expected to print these, and to add whatever its file system says
+     * about the failure. */
+    void (*warn)(void *ctx, const char *path, const char *why);
+    void  *warn_ctx;
 } libidx_scan_cfg_t;
 
 typedef struct {
@@ -123,6 +132,7 @@ typedef struct {
     uint32_t skipped_not_audio;
     uint32_t skipped_path_too_long;
     uint32_t skipped_too_deep;
+    uint32_t skipped_unreadable_dir;   /* opendir failed — subtree skipped */
 } libidx_scan_stats_t;
 
 uint32_t libidx_scan_arena_bytes(const libidx_scan_cfg_t *cfg);

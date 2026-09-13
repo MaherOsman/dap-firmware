@@ -60,6 +60,7 @@ typedef struct {
 
 static vdir_t g_vdirs[VDIR_POOL];
 static int    g_opendir_fail;
+static const char *g_opendir_fail_under;   /* fail opendir on paths under this */
 
 static void vdir_push(vdir_t *d, const char *name, int is_dir, uint32_t size)
 {
@@ -83,6 +84,12 @@ static int v_opendir(void *ctx, const char *path, void **dh)
 
     (void)ctx;
     if (g_opendir_fail) return -1;
+    if (g_opendir_fail_under != NULL &&
+        strncmp(path, g_opendir_fail_under,
+                strlen(g_opendir_fail_under)) == 0 &&
+        strcmp(path, g_opendir_fail_under) != 0) {
+        return -1;
+    }
 
     for (i = 0; i < VDIR_POOL; i++) {
         if (!g_vdirs[i].in_use) { d = &g_vdirs[i]; break; }
@@ -346,6 +353,7 @@ static void env_reset(void)
     vfs_reset();
     memset(g_vdirs, 0, sizeof(g_vdirs));
     g_opendir_fail = 0;
+    g_opendir_fail_under = NULL;
     g_io = make_io();
     g_dir = make_dir();
 }
@@ -917,6 +925,112 @@ TEST(an_unreadable_root_is_an_error)
     CHECK_EQ(libidx_scan(&cfg, &g_stats), LIB_E_IO);
 }
 
+
+/* =====================================================================
+ * skipped things must never be silent
+ * ===================================================================== */
+
+#define WARN_MAX 8
+static char g_warn_path[WARN_MAX][LIB_PATH_MAX + 1];
+static char g_warn_why[WARN_MAX][64];
+static uint32_t g_warn_n;
+
+static void capture_warn(void *ctx, const char *path, const char *why)
+{
+    (void)ctx;
+    if (g_warn_n < WARN_MAX) {
+        strncpy(g_warn_path[g_warn_n], path, LIB_PATH_MAX);
+        g_warn_path[g_warn_n][LIB_PATH_MAX] = '\0';
+        strncpy(g_warn_why[g_warn_n], why, 63);
+        g_warn_why[g_warn_n][63] = '\0';
+    }
+    g_warn_n++;
+}
+
+TEST(an_unreadable_subtree_is_counted_and_reported)
+{
+    libidx_scan_cfg_t cfg;
+
+    env_reset();
+    card_reset();
+    card_add("/Music/Artist A/Album/01 One.flac", 100u);
+    card_add("/Music/Artist A/Album/02 Two.flac", 100u);
+    card_add("/Music/Artist B/Album/01 Three.flac", 100u);
+    cfg_defaults(&cfg);
+    cfg.root = "/Music";
+    cfg.warn = capture_warn;
+    g_warn_n = 0;
+
+    /* everything below /Music refuses to open — the exact shape of the
+     * _FS_LOCK exhaustion that made a real card look empty */
+    g_opendir_fail_under = "/Music";
+
+    CHECK_EQ(build_and_open(&cfg), LIB_OK);
+
+    /* the scan still "succeeds" and finds nothing, so the counter and the
+     * warning are the only evidence that anything went wrong */
+    CHECK_EQ(libidx_track_count(&g_lib), 0u);
+    CHECK_EQ(g_stats.tracks, 0u);
+    CHECK_EQ(g_stats.skipped_unreadable_dir, 2u);
+    CHECK_EQ(g_warn_n, 2u);
+    CHECK(strstr(g_warn_path[0], "/Music/Artist ") != NULL);
+    CHECK(strcmp(g_warn_why[0], "opendir failed") == 0);
+
+    libidx_close(&g_lib);
+}
+
+TEST(a_healthy_scan_reports_no_warnings)
+{
+    libidx_scan_cfg_t cfg;
+
+    env_reset();
+    card_small();
+    cfg_defaults(&cfg);
+    cfg.warn = capture_warn;
+    g_warn_n = 0;
+
+    CHECK_EQ(build_and_open(&cfg), LIB_OK);
+    CHECK_EQ(g_stats.skipped_unreadable_dir, 0u);
+    CHECK_EQ(g_warn_n, 0u);
+    libidx_close(&g_lib);
+}
+
+TEST(an_overlong_path_warns_as_well_as_counting)
+{
+    libidx_scan_cfg_t cfg;
+    uint32_t i, n;
+
+    env_reset();
+    card_reset();
+    strcpy(g_long_path, "/Music/A/");
+    n = (uint32_t)strlen(g_long_path);
+    for (i = 0; i < 200u; i++) g_long_path[n + i] = 'd';
+    strcpy(g_long_path + n + 200u, "/01 Song.flac");
+    card_add(g_long_path, 100u);
+    cfg_defaults(&cfg);
+    cfg.warn = capture_warn;
+    g_warn_n = 0;
+
+    CHECK_EQ(build_and_open(&cfg), LIB_OK);
+    CHECK(g_warn_n > 0u);
+    libidx_close(&g_lib);
+}
+
+TEST(a_scan_with_no_warn_callback_still_counts)
+{
+    libidx_scan_cfg_t cfg;
+
+    env_reset();
+    card_reset();
+    card_add("/Music/Artist A/Album/01 One.flac", 100u);
+    cfg_defaults(&cfg);
+    cfg.root = "/Music";
+    g_opendir_fail_under = "/Music";
+
+    CHECK_EQ(libidx_scan(&cfg, &g_stats), LIB_OK);
+    CHECK_EQ(g_stats.skipped_unreadable_dir, 1u);
+}
+
 /* =====================================================================
  * tag hook
  * ===================================================================== */
@@ -1102,6 +1216,11 @@ int main(void)
     RUN(missing_callbacks_are_rejected);
     RUN(a_write_failure_aborts_the_build);
     RUN(an_unreadable_root_is_an_error);
+
+    RUN(an_unreadable_subtree_is_counted_and_reported);
+    RUN(a_healthy_scan_reports_no_warnings);
+    RUN(an_overlong_path_warns_as_well_as_counting);
+    RUN(a_scan_with_no_warn_callback_still_counts);
 
     RUN(the_tag_hook_overrides_path_derived_values);
     RUN(a_tag_hook_returning_blanks_falls_back_to_unknown);

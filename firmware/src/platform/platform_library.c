@@ -56,6 +56,17 @@ static void on_progress(void *ctx, int phase, uint32_t done, uint32_t total)
     }
 }
 
+/* Every skipped file or subtree lands here. The scan itself cannot know
+ * why FatFs refused — that is what the FRESULT adds. Silence is the enemy:
+ * a scan that skips the whole library still returns OK and just reports
+ * fewer tracks. */
+static void on_warn(void *ctx, const char *path, const char *why)
+{
+    (void)ctx;
+    printf("  skip: %s — %s (%s)\r\n", path, why,
+           plat_libio_result_name(plat_libio_last_result()));
+}
+
 static void fill_cfg(libidx_scan_cfg_t *cfg)
 {
     memset(cfg, 0, sizeof(*cfg));
@@ -70,6 +81,7 @@ static void fill_cfg(libidx_scan_cfg_t *cfg)
     cfg->arena = g_scan_arena;
     cfg->arena_len = (uint32_t)sizeof(g_scan_arena);
     cfg->progress = on_progress;
+    cfg->warn = on_warn;
 }
 
 static int try_open(void)
@@ -111,10 +123,21 @@ static int do_scan(void)
            err_name(rc), (unsigned long)ms,
            (unsigned long)st.tracks, (unsigned long)st.albums,
            (unsigned long)st.artists, (unsigned long)st.dirs_visited);
-    printf("index: skipped %lu non-audio, %lu path-too-long, %lu too-deep\r\n",
+    printf("index: skipped %lu non-audio, %lu path-too-long, %lu too-deep, "
+           "%lu unreadable-dir\r\n",
            (unsigned long)st.skipped_not_audio,
            (unsigned long)st.skipped_path_too_long,
-           (unsigned long)st.skipped_too_deep);
+           (unsigned long)st.skipped_too_deep,
+           (unsigned long)st.skipped_unreadable_dir);
+
+    if (st.skipped_unreadable_dir > 0u) {
+        printf("index: %lu DIRECTORIES COULD NOT BE OPENED — the library is "
+               "incomplete\r\n", (unsigned long)st.skipped_unreadable_dir);
+    }
+    if (rc == LIB_OK && st.tracks == 0u) {
+        printf("index: scan found no audio at all — check DAP_MUSIC_ROOT "
+               "and the skip lines above\r\n");
+    }
 
     if (rc == LIB_E_FULL) {
         printf("index: a scan limit was hit — raise SCAN_MAX_* and rebuild\r\n");
