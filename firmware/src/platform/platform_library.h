@@ -15,10 +15,10 @@
 
 /* Bump this to force a rescan on the next boot without deleting the file:
  * the stored build_id is compared against it. */
-#define DAP_INDEX_BUILD_ID  1u
+#define DAP_INDEX_BUILD_ID  4u
 
 /* Folder to scan. "/" walks the whole card. */
-#define DAP_MUSIC_ROOT      "/"
+#define DAP_MUSIC_ROOT      "/Music"
 
 /* force_rescan != 0 always rebuilds, even if a current index exists.
  * Returns LIB_OK when the library is open and usable. */
@@ -26,5 +26,10 @@ int dap_library_init(int force_rescan);
 
 /* The open index, or NULL if it isn't open. Valid until the next init. */
 libidx_t *dap_library(void);
+
+/* Forces a rescan and reopens the index. The library pointer from
+ * dap_library() stays valid across this, but everything derived from the
+ * old index (browse position, the playing track index) does not. */
+int dap_library_rescan(void);
 
 #endif /* PLATFORM_LIBRARY_H */

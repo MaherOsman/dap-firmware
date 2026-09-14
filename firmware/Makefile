@@ -20,10 +20,13 @@ CORE    := src/core/ringbuf.c src/core/wav.c src/core/audio.c \
            src/core/decoder_flac.c \
            src/core/decoder_mp3.c \
            src/core/library_index.c \
-           src/core/library_build.c
+           src/core/library_build.c \
+           src/core/browse.c \
+           src/core/playqueue.c \
+           src/core/config.c
 
 DRIVERS := src/drivers/st7789.c
-UI      := src/ui/screen_library.c
+UI      := src/ui/screen_library.c src/ui/screen_now_playing.c src/ui/screen_settings.c
 
 # dr_flac is third-party and will not survive -Werror -Wconversion. It gets
 # its own relaxed rule rather than us editing someone else's library, which
@@ -39,7 +42,8 @@ $(BUILD)/dr_mp3_impl.o: src/core/dr_mp3_impl.c third_party/dr_mp3.h | $(BUILD)
 
 TESTS   := test_ringbuf test_wav test_audio test_encoder \
            test_player test_st7789 test_font test_gfx test_decoder \
-           test_decoder_flac test_decoder_mp3 test_library_index test_library_build
+           test_decoder_flac test_decoder_mp3 test_library_index test_library_build \
+           test_browse test_playqueue test_screen_now_playing test_config test_screen_settings
 
 BINS    := $(addprefix $(BUILD)/,$(TESTS))
 
@@ -54,9 +58,9 @@ $(BUILD)/%: tests/%.c $(CORE) $(DRIVERS) $(UI) $(VENDOR_OBJ) | $(BUILD)
 	$(CC) $(CFLAGS) -o $@ $< $(CORE) $(DRIVERS) $(UI) $(VENDOR_OBJ)
 
 # Render real 240x240 screens to images you can look at.
-preview: | $(BUILD)
+preview: $(VENDOR_OBJ) | $(BUILD)
 	@mkdir -p $(BUILD)/preview
-	$(CC) $(CFLAGS) -o $(BUILD)/preview_gen tools/preview.c $(CORE) $(UI)
+	$(CC) $(CFLAGS) -o $(BUILD)/preview_gen tools/preview.c $(CORE) $(UI) $(VENDOR_OBJ)
 	./$(BUILD)/preview_gen
 
 test: $(BINS)

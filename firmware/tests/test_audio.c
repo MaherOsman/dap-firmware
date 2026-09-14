@@ -110,6 +110,96 @@ TEST(saturation_helper)
     CHECK_EQ(audio_sat32(0), 0);
 }
 
+TEST(a_gain_ramp_moves_smoothly_between_two_levels)
+{
+    int32_t buf[256];
+    int i;
+
+    for (i = 0; i < 256; i++) buf[i] = 1 << 24;
+
+    /* half gain to unity across the block */
+    audio_apply_gain_ramp(buf, 256, 32768u, 65536u);
+
+    /* starts near the old level, ends near the new one */
+    CHECK(buf[0] <= (1 << 24) / 2 + 1000);
+    CHECK(buf[255] > (1 << 24) * 3 / 4);
+
+    /* and never steps backwards — a non-monotonic ramp would be a click of
+     * its own */
+    for (i = 1; i < 256; i++) {
+        CHECK(buf[i] >= buf[i - 1]);
+    }
+}
+
+TEST(a_ramp_between_equal_levels_is_a_flat_gain)
+{
+    int32_t ramped[64], flat[64];
+    int i;
+
+    for (i = 0; i < 64; i++) { ramped[i] = flat[i] = 1 << 20; }
+
+    audio_apply_gain_ramp(ramped, 64, 32768u, 32768u);
+    audio_apply_gain(flat, 64, 32768u);
+
+    for (i = 0; i < 64; i++) {
+        CHECK_EQ(ramped[i], flat[i]);
+    }
+}
+
+TEST(a_unity_to_unity_ramp_is_bit_perfect)
+{
+    int32_t buf[32];
+    int i;
+
+    for (i = 0; i < 32; i++) buf[i] = (int32_t)(i * 0x01234567);
+    {
+        int32_t before[32];
+        memcpy(before, buf, sizeof(before));
+        audio_apply_gain_ramp(buf, 32, 65536u, 65536u);
+        CHECK_EQ(memcmp(before, buf, sizeof(before)), 0);
+    }
+}
+
+TEST(a_ramp_down_to_silence_ends_silent)
+{
+    int32_t buf[128];
+    int i;
+
+    for (i = 0; i < 128; i++) buf[i] = 1 << 24;
+    audio_apply_gain_ramp(buf, 128, 65536u, 0u);
+
+    /* The last sample sits one ramp step short of the target rather than
+     * exactly on it: the next block starts flat at the new level, so
+     * landing early here would apply the change twice. */
+    CHECK(buf[0] > buf[127]);
+    CHECK(buf[127] < buf[0] / 64);
+    for (i = 1; i < 128; i++) {
+        CHECK(buf[i] <= buf[i - 1]);
+    }
+}
+
+TEST(a_ramp_saturates_rather_than_wrapping)
+{
+    int32_t buf[16];
+    int i;
+
+    for (i = 0; i < 16; i++) buf[i] = INT32_MIN;
+    audio_apply_gain_ramp(buf, 16, 65536u, 65536u);
+    for (i = 0; i < 16; i++) CHECK(buf[i] <= 0);
+
+    for (i = 0; i < 16; i++) buf[i] = INT32_MAX;
+    audio_apply_gain_ramp(buf, 16, 65536u, 65536u);
+    for (i = 0; i < 16; i++) CHECK(buf[i] > 0);
+}
+
+TEST(an_empty_ramp_does_nothing)
+{
+    int32_t buf[4] = { 1, 2, 3, 4 };
+    audio_apply_gain_ramp(buf, 0, 0u, 65536u);
+    CHECK_EQ(buf[0], 1);
+    CHECK_EQ(buf[3], 4);
+}
+
 int main(void)
 {
     printf("audio\n");
@@ -124,5 +214,11 @@ int main(void)
     RUN(mute_produces_silence);
     RUN(peak_handles_int32_min);
     RUN(saturation_helper);
+    RUN(a_gain_ramp_moves_smoothly_between_two_levels);
+    RUN(a_ramp_between_equal_levels_is_a_flat_gain);
+    RUN(a_unity_to_unity_ramp_is_bit_perfect);
+    RUN(a_ramp_down_to_silence_ends_silent);
+    RUN(a_ramp_saturates_rather_than_wrapping);
+    RUN(an_empty_ramp_does_nothing);
     return TEST_SUMMARY();
 }

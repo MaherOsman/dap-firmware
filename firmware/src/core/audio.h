@@ -36,6 +36,13 @@ uint32_t audio_volume_q16(uint8_t percent);
 /* Apply gain with saturation. gain is Q16 (65536 == unity). */
 void audio_apply_gain(int32_t *buf, size_t samples, uint32_t gain_q16);
 
+/* Same, but sliding from from_q16 to to_q16 across the block. Volume is
+ * applied when audio is buffered, not when it is played, so changing level
+ * mid-track leaves a step in the waveform at the block boundary — this
+ * spreads it out so it does not click. */
+void audio_apply_gain_ramp(int32_t *buf, size_t samples,
+                           uint32_t from_q16, uint32_t to_q16);
+
 /* Peak meter for the UI, returns the largest absolute sample. */
 int32_t audio_peak(const int32_t *buf, size_t samples);
 

@@ -156,9 +156,17 @@ DRESULT USER_write (
 )
 {
   /* USER CODE BEGIN WRITE */
+    (void)pdrv;
+    if (Stat & STA_NOINIT) return RES_NOTRDY;
+
+    sd_err_t e = sd_write_blocks(&sd_card, (uint32_t)sector, buff, (uint32_t)count);
+    if (e != SD_OK) {
+        printf("sd: write_blocks err %d (%s), sector %lu, count %lu, token 0x%02X\r\n",
+               (int)e, sd_err_str(e), (unsigned long)sector, (unsigned long)count,
+               (unsigned)sd_last_bad_token);
+    }
+    return (e == SD_OK) ? RES_OK : RES_ERROR;
   /* USER CODE HERE */
-    (void)pdrv; (void)buff; (void)sector; (void)count;
-    return RES_WRPRT;             /* read-only: playback never writes */
   /* USER CODE END WRITE */
 }
 #endif /* _USE_WRITE == 1 */

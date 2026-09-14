@@ -34,6 +34,7 @@ static decoder_info_t g_info;      /* remaining in the data chunk */
 static bool     g_file_open;
 static bool     g_dma_running;
 static uint32_t g_refill_max_ms;
+static uint32_t g_gain_q16 = 65536u;   /* last gain actually applied */
 
 /* Written by the ISR, drained by the main loop. */
 static volatile uint32_t g_isr_frames;
@@ -90,8 +91,15 @@ static void refill_from_file(void)
     if (got == 0) { player_set_exhausted(&g_pl, true); return; }
 
     size_t samples = got * 2u;
-    if (g_pl.volume < 100)
-        audio_apply_gain(g_unpack, samples, audio_volume_q16(g_pl.volume));
+    {
+        uint32_t want = audio_volume_q16(g_pl.volume);
+        if (want != g_gain_q16) {
+            audio_apply_gain_ramp(g_unpack, samples, g_gain_q16, want);
+            g_gain_q16 = want;
+        } else if (want != 65536u) {
+            audio_apply_gain(g_unpack, samples, want);
+        }
+    }
 
     rb_write(&g_rb, (const uint8_t *)g_unpack, samples * sizeof(int32_t));
 }
@@ -151,6 +159,7 @@ static uint32_t fatfs_size(void *ctx)
 
 int plat_audio_play(const char *path)
 {
+    g_gain_q16 = audio_volume_q16(g_pl.volume);
     plat_audio_stop();
 
     if (f_open(&g_fil, path, FA_READ) != FR_OK) {
@@ -236,3 +245,69 @@ void plat_audio_stop(void)
 bool plat_audio_is_active(void) { return g_pl.state != PLAYER_STOPPED; }
 unsigned plat_audio_underruns(void) { return (unsigned)g_pl.underruns; }
 unsigned plat_audio_position_ms(void) { return (unsigned)player_position_ms(&g_pl); }
+
+/* ---- pause, volume, and track facts -------------------------------------
+ *
+ * Added when the UI grew a play/pause control. Pausing the player alone is
+ * not enough: fill_half() drains the ring from the DMA interrupt regardless
+ * of player state, so the sound would continue until the buffer emptied and
+ * then turn into counted underruns. HAL_SAI_DMAPause stops the transfer and
+ * leaves the ring intact, so resume does not re-preroll or click.
+ */
+
+void plat_audio_pause(void)
+{
+    if (g_pl.state != PLAYER_PLAYING && g_pl.state != PLAYER_BUFFERING) {
+        return;
+    }
+    if (g_dma_running) {
+        HAL_SAI_DMAPause(g_hsai);
+    }
+    if (g_pl.state == PLAYER_PLAYING) {
+        player_play_pause(&g_pl);
+    }
+}
+
+void plat_audio_resume(void)
+{
+    if (g_pl.state != PLAYER_PAUSED) return;
+
+    player_play_pause(&g_pl);
+    if (g_dma_running) {
+        HAL_SAI_DMAResume(g_hsai);
+    }
+}
+
+bool plat_audio_is_paused(void)
+{
+    return g_pl.state == PLAYER_PAUSED;
+}
+
+/* Volume is applied in refill_from_file(), so a change only affects audio
+ * buffered after it — roughly a ring's worth of latency. */
+uint8_t plat_audio_set_volume(int delta)
+{
+    return player_set_volume(&g_pl, delta);
+}
+
+uint8_t plat_audio_volume(void)
+{
+    return g_pl.volume;
+}
+
+uint32_t plat_audio_duration_ms(void)
+{
+    if (g_info.sample_rate == 0u || g_info.total_frames == 0u) return 0u;
+    return (uint32_t)(((uint64_t)g_info.total_frames * 1000u)
+                      / g_info.sample_rate);
+}
+
+uint32_t plat_audio_sample_rate(void) { return g_info.sample_rate; }
+uint8_t  plat_audio_bit_depth(void)   { return (uint8_t)g_info.bits_per_sample; }
+uint8_t  plat_audio_channels(void)    { return (uint8_t)g_info.channels; }
+
+const char *plat_audio_format(void)
+{
+    if (!g_file_open || g_dec.vt == NULL) return "";
+    return g_dec.vt->name;
+}

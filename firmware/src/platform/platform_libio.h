@@ -25,4 +25,9 @@ const char *plat_libio_result_name(int fres);
 unsigned plat_libio_peak_files(void);
 unsigned plat_libio_peak_dirs(void);
 
+/* The shared FatFs binding. Anything that needs the card — the index,
+ * settings, later the art cache — borrows this rather than building its
+ * own. Safe to call at any time; it does not touch the handle pools. */
+const lib_io_t *plat_libio_shared(void);
+
 #endif /* PLATFORM_LIBIO_H */

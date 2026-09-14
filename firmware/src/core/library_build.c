@@ -377,6 +377,13 @@ static void sort_ents(bld_t *b)
 /* pass 1 — walk                                                         */
 /* ===================================================================== */
 
+static void bld_warn(bld_t *b, const char *path, const char *why)
+{
+    if (b->cfg->warn) {
+        b->cfg->warn(b->cfg->warn_ctx, path, why);
+    }
+}
+
 static int add_track(bld_t *b, const char *path, uint32_t size)
 {
     const libidx_scan_cfg_t *cfg = b->cfg;
@@ -395,6 +402,7 @@ static int add_track(bld_t *b, const char *path, uint32_t size)
         /* Storing it would silently truncate and the path would never open
          * again, so refuse it and make it visible in the stats instead. */
         b->st->skipped_path_too_long++;
+        bld_warn(b, path, "path longer than LIB_PATH_MAX");
         return LIB_OK;
     }
     if (b->n_ent >= cfg->max_tracks) return LIB_E_FULL;
@@ -507,6 +515,7 @@ static int walk(bld_t *b)
         if (plen + 1u + nlen > LIB_PATH_MAX) {
             if (de.is_dir) b->st->skipped_too_deep++;
             else b->st->skipped_path_too_long++;
+            bld_warn(b, de.name, "name makes the path too long");
             continue;
         }
 
@@ -516,12 +525,17 @@ static int walk(bld_t *b)
         if (de.is_dir) {
             if (depth >= LIB_BUILD_MAX_DEPTH) {
                 b->st->skipped_too_deep++;
+                bld_warn(b, path, "nested deeper than LIB_BUILD_MAX_DEPTH");
                 path[plen] = '\0';
                 continue;
             }
             if (cfg->dir->opendir(cfg->dir->ctx, path,
                                   &stack[depth].dh) != 0) {
-                /* An unreadable directory is not fatal — skip the subtree. */
+                /* An unreadable directory is not fatal — the subtree is
+                 * skipped. It must never be silent, though: skipping the
+                 * whole library this way looks exactly like an empty card. */
+                b->st->skipped_unreadable_dir++;
+                bld_warn(b, path, "opendir failed");
                 path[plen] = '\0';
                 continue;
             }

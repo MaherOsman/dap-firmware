@@ -146,6 +146,9 @@ const char *sd_err_str(sd_err_t e) {
     case SD_ERR_CMD16:          return "CMD16: set blocklen failed";
     case SD_ERR_VOLTAGE:        return "card rejects 3.3V";
     case SD_ERR_READ_CMD:       return "read command rejected";
+    case SD_ERR_WRITE_CMD:      return "CMD24 rejected";
+    case SD_ERR_WRITE_TOKEN:    return "card rejected the data block";
+    case SD_ERR_WRITE_BUSY:     return "card stuck busy after write";
     case SD_ERR_READ_TOKEN:     return "no data token from card";
     case SD_ERR_TIMEOUT:        return "timeout";
     default:                    return "unknown error";
@@ -383,4 +386,116 @@ sd_err_t sd_read_blocks(sd_t *sd, uint32_t lba, uint8_t *dst, uint32_t count) {
         }
 
         return result;
+}
+
+/* ------------------------------------------------------------------ */
+/* Writing. Added when the library index needed to put a file on the   */
+/* card -- until then this driver was deliberately read-only.          */
+/*                                                                     */
+/* CMD24 per block rather than CMD25 multi-block: slower, but a failed */
+/* multi-block write leaves the card mid-transaction and needs CMD12   */
+/* plus a stop token to unwind correctly. Single-block has no such     */
+/* state to get wrong. Revisit if scan time becomes the complaint.     */
+/* ------------------------------------------------------------------ */
+
+#define CMD24  24   /* WRITE_BLOCK          -> R1 + data packet        */
+
+#define TOK_START_BLOCK   0xFEu  /* single block, and CMD17/18 reads   */
+#define TOK_RESP_MASK     0x1Fu
+#define TOK_RESP_ACCEPTED 0x05u
+#define TOK_RESP_CRC_ERR  0x0Bu
+#define TOK_RESP_WRITE_ERR 0x0Du
+
+/* The card holds DO low while it programs the block. This is the slow
+ * part of a write -- tens of ms on a cheap card, and the spec allows up
+ * to 250 ms. A timeout that is merely "generous for a read" is far too
+ * short here, and the failure mode is a half-written block. */
+#define WRITE_BUSY_TIMEOUT_MS 500u
+
+static sd_err_t wait_write_done(sd_t *sd) {
+    uint32_t start = sd->bus.millis(sd->bus.ctx);
+
+    for (;;) {
+        if (rx_byte(sd) == 0xFF) return SD_OK;
+        if ((sd->bus.millis(sd->bus.ctx) - start) > WRITE_BUSY_TIMEOUT_MS) {
+            return SD_ERR_WRITE_BUSY;
+        }
+    }
+}
+
+/* Sends one 512-byte data packet and reads the card's verdict on it.
+ * Assumes CS is already low and CMD24 has returned R1 == 0x00. */
+static sd_err_t write_data_block(sd_t *sd, const uint8_t *src) {
+    uint8_t tok = TOK_START_BLOCK;
+    uint8_t crc[2] = { 0xFF, 0xFF };   /* CRC is off in SPI mode */
+    uint8_t resp;
+
+    /* One byte of gap between the R1 and the token, as for reads. */
+    (void)rx_byte(sd);
+
+    if (!tx(sd, &tok, 1))              return SD_ERR_BUS;
+    if (!tx(sd, src, SD_BLOCK_SIZE))   return SD_ERR_BUS;
+    if (!tx(sd, crc, 2))               return SD_ERR_BUS;
+
+    /* The data response arrives immediately: xxx0sss1, where sss is the
+     * verdict. Anything but "accepted" means the block did not land, and
+     * must not be reported as success. */
+    resp = rx_byte(sd);
+    switch (resp & TOK_RESP_MASK) {
+    case TOK_RESP_ACCEPTED:
+        break;
+    case TOK_RESP_CRC_ERR:
+    case TOK_RESP_WRITE_ERR:
+    default:
+        sd_last_bad_token = resp;
+        return SD_ERR_WRITE_TOKEN;
+    }
+
+    /* Accepted only means "received". The card is now programming it. */
+    return wait_write_done(sd);
+}
+
+sd_err_t sd_write_blocks(sd_t *sd, uint32_t lba, const uint8_t *src,
+                         uint32_t count) {
+    if (sd == NULL || src == NULL || count == 0) return SD_ERR_PARAM;
+    if (!sd->initialised)                        return SD_ERR_NOT_INIT;
+
+    /* Same addressing trap as the read path: SDSC is byte-addressed,
+     * SDHC/SDXC block-addressed. Getting it wrong here does not error --
+     * it writes over the wrong part of the card. */
+    uint32_t addr_step = sd->block_addressed ? 1u : SD_BLOCK_SIZE;
+    sd_err_t result = SD_ERR_TIMEOUT;
+
+    for (uint32_t i = 0; i < count; i++) {
+        uint32_t addr = (lba + i) * addr_step;
+        const uint8_t *blk = src + (i * SD_BLOCK_SIZE);
+
+        /* Retry for the same reason reads do: a card that stalls on one
+         * block is not a dead card. A write that fails all three
+         * attempts is reported, never silently skipped. */
+        result = SD_ERR_TIMEOUT;
+        for (int attempt = 0; attempt < 3; attempt++) {
+            if (attempt > 0) {
+                cs_high(sd);
+                (void)wait_not_busy(sd);
+            }
+
+            cs_low(sd);
+            if (send_cmd(sd, CMD24, addr) != 0x00) {
+                result = SD_ERR_WRITE_CMD;
+            } else {
+                result = write_data_block(sd, blk);
+            }
+            cs_high(sd);
+            /* Eight trailing clocks with CS high let the card finish its
+             * internal bookkeeping before the next transaction. */
+            (void)rx_byte(sd);
+
+            if (result == SD_OK) break;
+        }
+
+        if (result != SD_OK) return result;
+    }
+
+    return result;
 }

@@ -59,6 +59,9 @@ typedef enum {
     SD_ERR_VOLTAGE,         /* card refuses 3.3 V                      */
     SD_ERR_READ_CMD,        /* CMD17/18 returned non-zero R1           */
     SD_ERR_READ_TOKEN,      /* data token never arrived / error token  */
+    SD_ERR_WRITE_CMD,       /* CMD24 returned non-zero R1              */
+    SD_ERR_WRITE_TOKEN,     /* card rejected the data packet           */
+    SD_ERR_WRITE_BUSY,      /* card never released DO after programming */
     SD_ERR_TIMEOUT
 } sd_err_t;
 
@@ -78,6 +81,10 @@ sd_err_t sd_init(sd_t *sd, const sd_bus_t *bus);
  * `lba` into `dst` (which must hold count * SD_BLOCK_SIZE bytes).
  * Uses CMD17 for count == 1, CMD18 + CMD12 otherwise. */
 sd_err_t sd_read_blocks(sd_t *sd, uint32_t lba, uint8_t *dst, uint32_t count);
+
+/* Writes `count` 512-byte blocks from `src` starting at `lba`, one
+ * CMD24 per block. Retries each block up to three times. */
+sd_err_t sd_write_blocks(sd_t *sd, uint32_t lba, const uint8_t *src, uint32_t count);
 
 static inline bool sd_is_initialised(const sd_t *sd) {
     return sd != NULL && sd->initialised;

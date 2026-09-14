@@ -135,6 +135,7 @@ TEST(library_screen_draws_without_escaping_the_buffer)
 {
     setup();
     lib_row_t rows[40];
+    memset(rows, 0, sizeof(rows));
     for (int i = 0; i < 40; i++) {
         rows[i].text = "Some Artist With A Fairly Long Name Indeed";
         rows[i].has_sub = true;
@@ -197,6 +198,7 @@ TEST(selected_row_is_highlighted)
 {
     setup();
     lib_row_t rows[5];
+    memset(rows, 0, sizeof(rows));
     for (int i = 0; i < 5; i++) {
         rows[i].text = "Track";
         rows[i].has_sub = false;
@@ -214,6 +216,7 @@ TEST(selected_row_is_highlighted)
 TEST(scrollbar_appears_only_when_needed)
 {
     lib_row_t rows[5];
+    memset(rows, 0, sizeof(rows));
     for (int i = 0; i < 5; i++) {
         rows[i].text = "x"; rows[i].has_sub = false; rows[i].is_current = false;
     }
@@ -226,6 +229,7 @@ TEST(scrollbar_appears_only_when_needed)
 
     setup();
     lib_row_t many[60];
+    memset(many, 0, sizeof(many));
     for (int i = 0; i < 60; i++) {
         many[i].text = "x"; many[i].has_sub = false; many[i].is_current = false;
     }

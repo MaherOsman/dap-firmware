@@ -13,6 +13,7 @@
 #include "../src/core/gfx.h"
 #include "../src/core/theme.h"
 #include "../src/ui/screen_library.h"
+#include "../src/ui/screen_now_playing.h"
 
 static uint16_t fb[SCREEN_W * SCREEN_H];
 static gfx_t g;
@@ -64,6 +65,7 @@ static const char *TRACKS[] = {
 static void render_artist_level(const theme_t *t, const char *out)
 {
     lib_row_t rows[N_ARTISTS];
+    memset(rows, 0, sizeof(rows));
     for (int i = 0; i < N_ARTISTS; i++) {
         rows[i].text       = ARTISTS[i];
         rows[i].has_sub    = true;
@@ -80,6 +82,7 @@ static void render_artist_level(const theme_t *t, const char *out)
 static void render_track_level(const theme_t *t, const char *out)
 {
     lib_row_t rows[N_TRACKS];
+    memset(rows, 0, sizeof(rows));
     for (int i = 0; i < N_TRACKS; i++) {
         rows[i].text       = TRACKS[i];
         rows[i].has_sub    = false;
@@ -140,6 +143,66 @@ static void render_font_specimen(const theme_t *t, const char *out)
     write_ppm(out);
 }
 
+/* A track with everything filled in — the layout's busiest realistic case. */
+static np_state_t specimen_track(void)
+{
+    np_state_t s;
+    memset(&s, 0, sizeof(s));
+    s.title    = "Prelude a l'apres-midi d'un faune";
+    s.artist   = "Claude Debussy";
+    s.album    = "Orchestral Works";
+    s.path     = "/Music/Claude Debussy/Orchestral Works/03 Prelude.flac";
+    s.format   = "FLAC";
+    s.elapsed_ms     = 187000u;
+    s.duration_ms    = 611000u;
+    s.sample_rate_hz = 96000u;
+    s.bit_depth      = 24u;
+    s.channels       = 2u;
+    s.bitrate_kbps   = 2304u;
+    s.is_playing = true;
+    s.enabled = NP_CTL_DEFAULT;
+    s.focus   = NP_CTL_PLAY;
+    s.volume_pct = 65u;
+    return s;
+}
+
+static void render_now_playing(const theme_t *t, const char *out)
+{
+    np_state_t s = specimen_track();
+    screen_now_playing_draw(&g, t, &s);
+    write_ppm(out);
+}
+
+/* Volume focused with the overlay up — the most crowded the screen gets. */
+static void render_now_playing_volume(const theme_t *t, const char *out)
+{
+    np_state_t s = specimen_track();
+    s.focus = NP_CTL_VOL;
+    s.vol_active = true;
+    screen_now_playing_draw(&g, t, &s);
+    write_ppm(out);
+}
+
+/* Paused at zero elapsed with all five controls: checks the pause glyph, a
+ * zero-length scrubber, and the tightest control spacing. */
+static void render_now_playing_paused(const theme_t *t, const char *out)
+{
+    np_state_t s = specimen_track();
+    s.is_playing = false;
+    s.elapsed_ms = 0u;
+    s.enabled = NP_CTL_ALL;
+    s.focus = NP_CTL_NEXT;
+    screen_now_playing_draw(&g, t, &s);
+    write_ppm(out);
+}
+
+static void render_info(const theme_t *t, const char *out)
+{
+    np_state_t s = specimen_track();
+    screen_info_draw(&g, t, &s);
+    write_ppm(out);
+}
+
 int main(void)
 {
     gfx_init(&g, fb, SCREEN_W, SCREEN_H);
@@ -152,6 +215,12 @@ int main(void)
     render_track_level(&THEME_DARK, "build/preview/tracks_dark.ppm");
     render_font_specimen(&THEME_DARK, "build/preview/specimen_dark.ppm");
     render_font_specimen(&THEME_IPOD, "build/preview/specimen_ipod.ppm");
+    render_now_playing(&THEME_DARK, "build/preview/nowplaying_dark.ppm");
+    render_now_playing(&THEME_IPOD, "build/preview/nowplaying_ipod.ppm");
+    render_now_playing(&THEME_WARM, "build/preview/nowplaying_warm.ppm");
+    render_now_playing_volume(&THEME_DARK, "build/preview/nowplaying_volume.ppm");
+    render_now_playing_paused(&THEME_DARK, "build/preview/nowplaying_paused.ppm");
+    render_info(&THEME_DARK, "build/preview/info_dark.ppm");
 
     return 0;
 }
