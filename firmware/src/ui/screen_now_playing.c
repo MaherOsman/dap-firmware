@@ -8,13 +8,11 @@
 /* ---------------------------------------------------------------- layout */
 
 #define MARGIN        10
-#define ART_SIZE      104
-#define ART_Y         (LIB_HEADER_H + 6)
+#define ART_SIZE      144
+#define ART_Y         (LIB_HEADER_H + 4)
 
-#define TITLE_Y       (ART_Y + ART_SIZE + 6)
-#define ARTIST_Y      (TITLE_Y + 20)
 
-#define BAR_Y         (ARTIST_Y + 18)      /* centre line of the scrubber */
+#define BAR_Y         186                  /* centre line of the scrubber */
 #define TIMES_Y       (BAR_Y + 6)
 
 #define CTL_ROW_Y     (SCREEN_H - 30)
@@ -362,10 +360,6 @@ void screen_now_playing_draw(gfx_t *g, const theme_t *t, const np_state_t *s)
     draw_topbar(g, t, s->album);
     draw_album_art(g, t);
 
-    (void)gfx_text_ellipsis(g, &font_lg, or_dash(s->title), MARGIN, TITLE_Y,
-                            SCREEN_W - MARGIN * 2, t->text_primary);
-    (void)gfx_text_ellipsis(g, &font_sm, or_dash(s->artist), MARGIN, ARTIST_Y,
-                            SCREEN_W - MARGIN * 2, t->text_secondary);
 
     draw_scrubber(g, t, s);
     draw_controls(g, t, s);

@@ -28,7 +28,7 @@
 #include "screen_library.h"
 #include "theme.h"
 #include "encoder.h"
-#include "browse.h"
+#include "platform_ui.h"
 #include "platform_library.h"
 #include <string.h>
 /* USER CODE END Includes */
@@ -76,12 +76,6 @@ static encoder_t enc;
 static volatile int enc_delta = 0;
 
 static volatile int  btn_event_pending = 0;
-static browse_t      g_browse;
-static lib_row_t     g_rows[BROWSE_MAX_ROWS];
-
-/* Global track index of what is playing, so the play marker can
- * propagate up to the album and artist rows. */
-static uint32_t      g_playing = BROWSE_NOTHING_PLAYING;
 
 
 extern const st7789_bus_t platform_st7789_bus;
@@ -179,7 +173,7 @@ int main(void)
             dap_library_init(0);
             /* NULL when the index failed to open — browse stays empty and
              * safe rather than crashing, and the VCP already said why. */
-            browse_init(&g_browse, dap_library());
+            dap_ui_init(&fb, &tft, dap_library());
         }
     }
 
@@ -199,65 +193,19 @@ int main(void)
   plat_audio_service();
 
   int delta;
-       int btn;
+  int btn;
 
-       __disable_irq();
-       delta = enc_delta;
-       enc_delta = 0;
-       btn = btn_event_pending;
-       btn_event_pending = 0;
-       __enable_irq();
+  __disable_irq();
+  delta = enc_delta;
+  enc_delta = 0;
+  btn = btn_event_pending;
+  btn_event_pending = 0;
+  __enable_irq();
 
-       if (delta != 0) {
-                 browse_move(&g_browse, delta);
-                 redraw = true;
-             }
-
-             if (btn == 1) {
-                 lib_track_t t;
-                 uint32_t    gi;
-
-                 /* browse_activate descends a level, or hands back a track and
-                  * says BROWSE_PLAY. It never starts playback itself — what
-                  * "play" means is main's decision, which is what lets a queue
-                  * or a now-playing screen arrive later without touching it. */
-                 if (browse_activate(&g_browse, &t, &gi) == BROWSE_PLAY) {
-                     if (plat_audio_play(t.path) == 0) {
-                         g_playing = gi;
-                         printf("play: %s\r\n", t.path);
-                     } else {
-                         /* The index says this file exists; the card disagrees.
-                          * Never fail silently here. */
-                         printf("play FAILED: %s\r\n", t.path);
-                     }
-                 }
-                 redraw = true;
-             } else if (btn == 2) {
-                 browse_back(&g_browse);
-                 redraw = true;
-             }
-
-             if (redraw) {
-                 /* Only the visible rows are built — a 3000-track album costs
-                  * the same as a 10-track one. */
-                 int n = browse_fill_rows(&g_browse, g_rows, BROWSE_MAX_ROWS,
-                                          g_playing);
-
-                 screen_library_draw_window(&fb, &THEME_DARK, g_rows, n,
-                                            browse_row_count(&g_browse),
-                                            browse_selected(&g_browse),
-                                            browse_scroll_top(&g_browse),
-                                            browse_header(&g_browse),
-                                            browse_level(&g_browse));
-
-                 tft.bus->set_cs(tft.bus->ctx, true);
-                 st7789_set_window(&tft, 0, 0, 239, 239);
-                 st7789_write_pixels(&tft, fb_storage, 240u * 240u);
-                 tft.bus->set_cs(tft.bus->ctx, false);
-
-                 redraw = false;
-             }
+  dap_ui_input(delta, btn);
+  dap_ui_tick();
   }
+
 
   /* USER CODE END 3 */
 }

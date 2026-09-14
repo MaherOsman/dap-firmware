@@ -1,0 +1,352 @@
+/* platform_ui.c — screen state, input dispatch, auto-advance, panel push. */
+
+#include "platform_ui.h"
+
+#include <stdio.h>
+#include <string.h>
+
+#include "main.h"
+
+#include "browse.h"
+#include "playqueue.h"
+#include "theme.h"
+#include "screen_library.h"
+#include "screen_now_playing.h"
+#include "platform_audio.h"
+
+/* Repaint cadence while a track plays, so the scrubber and elapsed time
+ * move without the encoder being touched. 500 ms is twice the resolution
+ * the seconds display needs, which is enough to never look stuck. */
+#define TICK_REDRAW_MS  500u
+
+/* Rows per SPI burst when pushing the framebuffer.
+ *
+ * The display and the SD card share SPI1, so every pixel pushed is time the
+ * card is not feeding the DAC. A whole 240x240 frame is 115 KB and blocks
+ * the main loop for roughly 40 ms — well past the ~23 ms the audio ring can
+ * survive without a refill, which showed up as dozens of underruns per track
+ * and audible static. Pushing in bands and servicing audio between them
+ * keeps the longest blocking window to a few milliseconds.
+ *
+ * 16 rows = 7.5 KB ≈ 4 ms at 15 MHz. Smaller bands mean more window-set
+ * overhead; larger ones creep back toward the budget. */
+#define PANEL_BAND_ROWS 16
+
+static gfx_t     *g_fb;
+static st7789_t  *g_tft;
+static libidx_t  *g_idx;
+
+static browse_t    g_browse;
+static playqueue_t g_pq;
+static ui_screen_t g_screen = UI_LIBRARY;
+static np_state_t  g_np;
+
+static lib_row_t g_rows[BROWSE_MAX_ROWS];
+static bool      g_dirty = true;
+static uint32_t  g_last_paint;
+
+/* Strings for the now-playing screen. np_state_t holds pointers, and the
+ * track record they would point into lives in the index page cache — which
+ * is overwritten by the next browse scroll. So they are copied here. */
+static char g_title[LIB_TITLE_MAX + 1];
+static char g_artist[64];
+static char g_album[64];
+static char g_path[LIB_PATH_MAX + 1];
+
+static const theme_t *g_theme = &THEME_DARK;
+
+/* ------------------------------------------------------------------ */
+
+static void copy_to(char *dst, size_t cap, const char *src)
+{
+    size_t i = 0;
+    if (src != NULL) {
+        while (src[i] != '\0' && i + 1u < cap) { dst[i] = src[i]; i++; }
+    }
+    dst[i] = '\0';
+}
+
+/* Caches the strings for whatever the queue says is current. */
+static void capture_track(uint32_t track)
+{
+    lib_track_t t;
+    uint32_t album;
+
+    g_title[0] = g_artist[0] = g_album[0] = g_path[0] = '\0';
+    if (g_idx == NULL || track == PQ_NO_TRACK) return;
+
+    if (libidx_track_global(g_idx, track, &t) != LIB_OK) return;
+
+    copy_to(g_title, sizeof(g_title), t.title);
+    copy_to(g_path, sizeof(g_path), t.path);
+
+    album = libidx_album_of_track(g_idx, track);
+    if (album != LIBIDX_NONE) {
+        copy_to(g_album, sizeof(g_album), libidx_album_name(g_idx, album));
+        copy_to(g_artist, sizeof(g_artist),
+                libidx_artist_name(g_idx, libidx_album_artist(g_idx, album)));
+    }
+}
+
+/* Rebuilds the parts of np_state that change every frame. Focus, volume
+ * mode and the enabled mask are owned by the input handler, so they are
+ * deliberately not touched here. */
+static void refresh_np(void)
+{
+    g_np.title  = g_title;
+    g_np.artist = g_artist;
+    g_np.album  = g_album;
+    g_np.path   = g_path;
+    g_np.format = plat_audio_format();
+
+    g_np.elapsed_ms  = plat_audio_position_ms();
+    g_np.duration_ms = plat_audio_duration_ms();
+
+    g_np.sample_rate_hz = plat_audio_sample_rate();
+    g_np.bit_depth      = plat_audio_bit_depth();
+    g_np.channels       = plat_audio_channels();
+    g_np.bitrate_kbps   = 0u;   /* the decoders do not report this yet */
+
+    g_np.is_playing = !plat_audio_is_paused() && plat_audio_is_active();
+    g_np.volume_pct = plat_audio_volume();
+}
+
+static bool start_track(uint32_t track)
+{
+    lib_track_t t;
+
+    if (g_idx == NULL) return false;
+    if (libidx_track_global(g_idx, track, &t) != LIB_OK) return false;
+
+    plat_audio_stop();
+    if (plat_audio_play(t.path) != 0) {
+        /* The index says this file exists and the card disagrees. Never
+         * silent: an empty now-playing screen with no explanation is the
+         * worst possible outcome here. */
+        printf("play FAILED: %s\r\n", t.path);
+        pq_stop(&g_pq);
+        capture_track(PQ_NO_TRACK);
+        return false;
+    }
+
+    pq_start(&g_pq, track);
+    capture_track(track);
+    printf("play: %s\r\n", t.path);
+    return true;
+}
+
+/* ------------------------------------------------------------------ */
+
+void dap_ui_init(gfx_t *fb, st7789_t *tft, libidx_t *idx)
+{
+    g_fb = fb;
+    g_tft = tft;
+    g_idx = idx;
+
+    browse_init(&g_browse, idx);
+    pq_init(&g_pq, idx);
+
+    memset(&g_np, 0, sizeof(g_np));
+    g_np.enabled = NP_CTL_DEFAULT;
+    g_np.focus = NP_CTL_PLAY;
+
+    g_screen = UI_LIBRARY;
+    g_dirty = true;
+}
+
+ui_screen_t dap_ui_screen(void) { return g_screen; }
+
+/* ---------------------------------------------------------- input */
+
+static void input_library(int delta, int btn)
+{
+    lib_track_t t;
+    uint32_t gi;
+
+    if (delta != 0) {
+        browse_move(&g_browse, delta);
+        g_dirty = true;
+    }
+
+    if (btn == 1) {
+        if (browse_activate(&g_browse, &t, &gi) == BROWSE_PLAY) {
+            if (start_track(gi)) {
+                /* Choosing a track means you want to watch it play. */
+                g_screen = UI_NOW_PLAYING;
+                g_np.focus = NP_CTL_PLAY;
+                g_np.vol_active = false;
+            }
+        }
+        g_dirty = true;
+    } else if (btn == 2) {
+        browse_back(&g_browse);
+        g_dirty = true;
+    }
+}
+
+static void activate_control(void)
+{
+    switch (g_np.focus) {
+    case NP_CTL_PLAY:
+        if (plat_audio_is_paused()) plat_audio_resume();
+        else                        plat_audio_pause();
+        pq_toggle_pause(&g_pq);
+        break;
+
+    case NP_CTL_VOL:
+        /* A mode, not an action: the turn changes meaning until it is
+         * pressed again. The overlay is what makes that visible. */
+        g_np.vol_active = !g_np.vol_active;
+        break;
+
+    case NP_CTL_INFO:
+        g_screen = UI_INFO;
+        break;
+
+    case NP_CTL_PREV: {
+        uint32_t p;
+        if (pq_prev(&g_pq, &p)) (void)start_track(p);
+        break;
+    }
+    case NP_CTL_NEXT: {
+        uint32_t n;
+        if (pq_next(&g_pq, &n)) (void)start_track(n);
+        break;
+    }
+    default:
+        break;
+    }
+}
+
+static void input_now_playing(int delta, int btn)
+{
+    if (delta != 0) {
+        if (g_np.vol_active) {
+            g_np.volume_pct = plat_audio_set_volume(delta * 5);
+        } else {
+            (void)np_focus_move(&g_np, delta);
+        }
+        g_dirty = true;
+    }
+
+    if (btn == 1) {
+        activate_control();
+        g_dirty = true;
+    } else if (btn == 2) {
+        /* Leaving with volume mode still on would strand the turn in a
+         * meaning the next screen does not have. */
+        g_np.vol_active = false;
+        g_screen = UI_LIBRARY;
+        g_dirty = true;
+    }
+}
+
+static void input_info(int delta, int btn)
+{
+    (void)delta;
+    if (btn == 2 || btn == 1) {
+        g_screen = UI_NOW_PLAYING;
+        g_dirty = true;
+    }
+}
+
+void dap_ui_input(int delta, int btn)
+{
+    if (delta == 0 && btn == 0) return;
+
+    switch (g_screen) {
+    case UI_NOW_PLAYING: input_now_playing(delta, btn); break;
+    case UI_INFO:        input_info(delta, btn);        break;
+    case UI_LIBRARY:
+    default:             input_library(delta, btn);     break;
+    }
+}
+
+/* ---------------------------------------------------------- paint */
+
+static void push_panel(void)
+{
+    int y;
+
+    for (y = 0; y < 240; y += PANEL_BAND_ROWS) {
+        int rows = PANEL_BAND_ROWS;
+        if (y + rows > 240) rows = 240 - y;
+
+        g_tft->bus->set_cs(g_tft->bus->ctx, true);
+        st7789_set_window(g_tft, 0, y, 239, y + rows - 1);
+        st7789_write_pixels(g_tft, g_fb->px + (size_t)y * 240u,
+                            (uint32_t)rows * 240u);
+        g_tft->bus->set_cs(g_tft->bus->ctx, false);
+
+        /* CS is deasserted before this runs, so the SD card is free to use
+         * the bus. This is the whole point of banding: the ring gets a
+         * refill opportunity every few milliseconds instead of once per
+         * frame. */
+        plat_audio_service();
+    }
+}
+
+static void paint(void)
+{
+    if (g_fb == NULL || g_tft == NULL) return;
+
+    switch (g_screen) {
+    case UI_NOW_PLAYING:
+        refresh_np();
+        screen_now_playing_draw(g_fb, g_theme, &g_np);
+        break;
+
+    case UI_INFO:
+        refresh_np();
+        screen_info_draw(g_fb, g_theme, &g_np);
+        break;
+
+    case UI_LIBRARY:
+    default: {
+        int n = browse_fill_rows(&g_browse, g_rows, BROWSE_MAX_ROWS,
+                                 pq_current(&g_pq));
+        screen_library_draw_window(g_fb, g_theme, g_rows, n,
+                                   browse_row_count(&g_browse),
+                                   browse_selected(&g_browse),
+                                   browse_scroll_top(&g_browse),
+                                   browse_header(&g_browse),
+                                   browse_level(&g_browse));
+        break;
+    }
+    }
+
+    push_panel();
+    g_last_paint = HAL_GetTick();
+    g_dirty = false;
+}
+
+void dap_ui_tick(void)
+{
+    uint32_t now = HAL_GetTick();
+
+    /* End of track. plat_audio_stop() runs inside the audio service when a
+     * file drains, so "the queue thinks it is playing but the platform is
+     * idle" is exactly the end-of-track signal. */
+    if (pq_state(&g_pq) == PQ_PLAYING && !plat_audio_is_active()) {
+        uint32_t next;
+        if (pq_track_finished(&g_pq, &next)) {
+            (void)start_track(next);
+        } else {
+            capture_track(PQ_NO_TRACK);
+        }
+        g_dirty = true;
+    }
+
+    /* The scrubber has to move on its own, but only while something is
+     * actually playing — repainting an idle screen twice a second would
+     * burn SPI bandwidth for nothing. */
+    if (!g_dirty && g_screen != UI_LIBRARY &&
+        pq_state(&g_pq) == PQ_PLAYING &&
+        (now - g_last_paint) >= TICK_REDRAW_MS) {
+        g_dirty = true;
+    }
+
+    if (g_dirty) {
+        paint();
+    }
+}
