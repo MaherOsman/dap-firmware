@@ -60,6 +60,8 @@ TEST(out_of_range_starting_values_fall_back_to_the_first)
 
 TEST(activating_a_value_row_cycles_it)
 {
+    int i;
+
     settings_init(&g_set, 0u, 0u);
 
     CHECK_EQ(settings_activate(&g_set), SET_ID_THEME);
@@ -67,8 +69,11 @@ TEST(activating_a_value_row_cycles_it)
     CHECK_EQ(settings_activate(&g_set), SET_ID_THEME);
     CHECK_EQ(settings_value(&g_set, SET_ID_THEME), 2u);
 
-    /* wraps back round rather than stopping at the end */
-    CHECK_EQ(settings_activate(&g_set), SET_ID_THEME);
+    /* Wraps rather than stopping at the end. Counted against THEME_COUNT
+     * so adding a theme does not make this test wrong. */
+    for (i = 2; i < THEME_COUNT; i++) {
+        CHECK_EQ(settings_activate(&g_set), SET_ID_THEME);
+    }
     CHECK_EQ(settings_value(&g_set, SET_ID_THEME), 0u);
 }
 

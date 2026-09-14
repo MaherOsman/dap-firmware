@@ -59,6 +59,8 @@ typedef struct {
 extern const theme_t THEME_DARK;
 extern const theme_t THEME_WARM;
 extern const theme_t THEME_IPOD;
+extern const theme_t THEME_MIDNIGHT;
+extern const theme_t THEME_MIDNIGHT;
 
 extern const theme_t *const ALL_THEMES[];
 extern const int THEME_COUNT;
