@@ -72,7 +72,16 @@
 #define LIB_TITLE_MAX        96u   /* bytes stored on card */
 #define LIB_PATH_MAX         192u
 
-#define LIB_PAGE_TRACKS      8u    /* track records per cached page */
+/* Track records per cached page.
+ *
+ * This MUST exceed a full screenful plus LIB_PAGE_LEAD, or a redraw spans
+ * two pages and the cache reloads on every frame — invisible except as a
+ * browser that feels slow. browse.c static-asserts the relationship against
+ * the real LIB_VISIBLE, which this file cannot see. 32 * 320 = 10 KB. */
+#define LIB_PAGE_TRACKS      32u
+
+#define LIB_PAGE_LEAD        8u    /* records kept behind the request, so
+                                   * scrolling up also hits the cache */
 
 #define LIB_INDEX_PATH       "/dap.idx"
 
@@ -183,6 +192,9 @@ uint32_t    libidx_artist_album(const libidx_t *lib, uint32_t artist, uint32_t n
 const char *libidx_album_name(const libidx_t *lib, uint32_t album);
 uint32_t    libidx_album_artist(const libidx_t *lib, uint32_t album);
 uint32_t    libidx_album_track_count(const libidx_t *lib, uint32_t album);
+/* Global index of an album's first track. Lets a caller map a global track
+ * index back to its album without reading any track records. */
+uint32_t    libidx_album_track_first(const libidx_t *lib, uint32_t album);
 uint32_t    libidx_track_count(const libidx_t *lib);                    /* total */
 
 /* Paged reads. Both hit the page cache; a cache hit does no I/O. */

@@ -389,6 +389,12 @@ uint32_t libidx_album_track_count(const libidx_t *lib, uint32_t album)
     return lib->albums[album].track_count;
 }
 
+uint32_t libidx_album_track_first(const libidx_t *lib, uint32_t album)
+{
+    if (!lib || !lib->is_open || album >= lib->hdr.album_count) return 0u;
+    return lib->albums[album].track_first;
+}
+
 /* ----------------------------------------------------------- paged read */
 
 int libidx_track_global(libidx_t *lib, uint32_t track, lib_track_t *out)
@@ -406,7 +412,16 @@ int libidx_track_global(libidx_t *lib, uint32_t track, lib_track_t *out)
         return LIB_OK;
     }
 
-    first = (track / LIB_PAGE_TRACKS) * LIB_PAGE_TRACKS;
+    /* Anchor the page near the requested track rather than on a fixed grid.
+     * A screenful of rows is LIB_VISIBLE long and a grid-aligned page will
+     * straddle it for most scroll positions, so an aligned cache reloads on
+     * nearly every redraw. Starting a few records behind the request keeps
+     * both scroll directions mostly inside one page. */
+    first = (track > LIB_PAGE_LEAD) ? (track - LIB_PAGE_LEAD) : 0u;
+    if (first + LIB_PAGE_TRACKS > lib->hdr.track_count) {
+        first = (lib->hdr.track_count > LIB_PAGE_TRACKS)
+              ? (lib->hdr.track_count - LIB_PAGE_TRACKS) : 0u;
+    }
     avail = lib->hdr.track_count - first;
     want  = (avail < LIB_PAGE_TRACKS) ? avail : LIB_PAGE_TRACKS;
     bytes = want * LIB_TRACK_REC_SIZE;
