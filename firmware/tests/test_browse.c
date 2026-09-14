@@ -459,13 +459,13 @@ TEST(album_of_track_finds_the_right_album)
     card_small();
     CHECK_EQ(build_and_browse(), LIB_OK);
 
-    CHECK_EQ(browse_album_of_track(&g_idx, 0u), 0u);
-    CHECK_EQ(browse_album_of_track(&g_idx, 2u), 0u);
-    CHECK_EQ(browse_album_of_track(&g_idx, 3u), 1u);
-    CHECK_EQ(browse_album_of_track(&g_idx, 4u), 1u);
-    CHECK_EQ(browse_album_of_track(&g_idx, 5u), 2u);
-    CHECK_EQ(browse_album_of_track(&g_idx, 99u), 0xFFFFFFFFu);
-    CHECK_EQ(browse_album_of_track(NULL, 0u), 0xFFFFFFFFu);
+    CHECK_EQ(libidx_album_of_track(&g_idx, 0u), 0u);
+    CHECK_EQ(libidx_album_of_track(&g_idx, 2u), 0u);
+    CHECK_EQ(libidx_album_of_track(&g_idx, 3u), 1u);
+    CHECK_EQ(libidx_album_of_track(&g_idx, 4u), 1u);
+    CHECK_EQ(libidx_album_of_track(&g_idx, 5u), 2u);
+    CHECK_EQ(libidx_album_of_track(&g_idx, 99u), LIBIDX_NONE);
+    CHECK_EQ(libidx_album_of_track(NULL, 0u), LIBIDX_NONE);
 
     libidx_close(&g_idx);
 }

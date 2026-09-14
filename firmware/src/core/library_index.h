@@ -83,6 +83,9 @@
 #define LIB_PAGE_LEAD        8u    /* records kept behind the request, so
                                    * scrolling up also hits the cache */
 
+/* "no such thing" for any index that returns an index. */
+#define LIBIDX_NONE          ((uint32_t)0xFFFFFFFFu)
+
 #define LIB_INDEX_PATH       "/dap.idx"
 
 enum {
@@ -196,6 +199,10 @@ uint32_t    libidx_album_track_count(const libidx_t *lib, uint32_t album);
  * index back to its album without reading any track records. */
 uint32_t    libidx_album_track_first(const libidx_t *lib, uint32_t album);
 uint32_t    libidx_track_count(const libidx_t *lib);                    /* total */
+
+/* Which album a global track index belongs to, or LIBIDX_NONE. Answered by
+ * binary search over the album table — reads no track records. */
+uint32_t libidx_album_of_track(const libidx_t *lib, uint32_t track);
 
 /* Paged reads. Both hit the page cache; a cache hit does no I/O. */
 int libidx_track_global(libidx_t *lib, uint32_t track, lib_track_t *out);

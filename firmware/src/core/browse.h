@@ -101,11 +101,4 @@ browse_result_t browse_activate(browse_t *br, lib_track_t *out,
 /* Back up one level. Returns false if already at the artist list. */
 bool browse_back(browse_t *br);
 
-/*
- * Which album a global track index belongs to, or UINT32_MAX. Exposed
- * because a now-playing screen needs it to name the album, and doing it
- * here means one implementation rather than two.
- */
-uint32_t browse_album_of_track(const libidx_t *idx, uint32_t track);
-
 #endif /* BROWSE_H */

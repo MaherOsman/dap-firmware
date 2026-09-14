@@ -395,6 +395,31 @@ uint32_t libidx_album_track_first(const libidx_t *lib, uint32_t album)
     return lib->albums[album].track_first;
 }
 
+uint32_t libidx_album_of_track(const libidx_t *lib, uint32_t track)
+{
+    uint32_t lo = 0, hi;
+
+    if (lib == NULL || !lib->is_open) return LIBIDX_NONE;
+    hi = lib->hdr.album_count;
+    if (hi == 0u || track >= lib->hdr.track_count) return LIBIDX_NONE;
+
+    /* track_first ascends across albums, so this is a binary search. */
+    while (lo < hi) {
+        uint32_t mid = lo + (hi - lo) / 2u;
+        uint32_t first = lib->albums[mid].track_first;
+        uint32_t count = lib->albums[mid].track_count;
+
+        if (track < first) {
+            hi = mid;
+        } else if (track >= first + count) {
+            lo = mid + 1u;
+        } else {
+            return mid;
+        }
+    }
+    return LIBIDX_NONE;
+}
+
 /* ----------------------------------------------------------- paged read */
 
 int libidx_track_global(libidx_t *lib, uint32_t track, lib_track_t *out)

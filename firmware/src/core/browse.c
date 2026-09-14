@@ -46,35 +46,9 @@ static int *top_ptr(browse_t *br)
 /* Global album index of the selected artist's Nth album. */
 static uint32_t cur_album(const browse_t *br)
 {
-    if (br->idx == NULL) return 0xFFFFFFFFu;
+    if (br->idx == NULL) return LIBIDX_NONE;
     return libidx_artist_album(br->idx, (uint32_t)br->artist_sel,
                                (uint32_t)br->album_sel);
-}
-
-uint32_t browse_album_of_track(const libidx_t *idx, uint32_t track)
-{
-    uint32_t lo = 0, hi;
-
-    if (idx == NULL) return 0xFFFFFFFFu;
-    hi = libidx_album_count(idx);
-    if (hi == 0u || track >= libidx_track_count(idx)) return 0xFFFFFFFFu;
-
-    /* track_first is ascending across albums, so this is a binary search --
-     * no track records are read to answer the question. */
-    while (lo < hi) {
-        uint32_t mid = lo + (hi - lo) / 2u;
-        uint32_t first = libidx_album_track_first(idx, mid);
-        uint32_t count = libidx_album_track_count(idx, mid);
-
-        if (track < first) {
-            hi = mid;
-        } else if (track >= first + count) {
-            lo = mid + 1u;
-        } else {
-            return mid;
-        }
-    }
-    return 0xFFFFFFFFu;
 }
 
 /* Does this album contain the playing track? */
@@ -96,8 +70,8 @@ static bool artist_is_playing(const libidx_t *idx, uint32_t artist,
     uint32_t album;
 
     if (playing == BROWSE_NOTHING_PLAYING) return false;
-    album = browse_album_of_track(idx, playing);
-    if (album == 0xFFFFFFFFu) return false;
+    album = libidx_album_of_track(idx, playing);
+    if (album == LIBIDX_NONE) return false;
     return libidx_album_artist(idx, album) == artist;
 }
 
@@ -132,7 +106,7 @@ int browse_row_count(const browse_t *br)
 
     default:
         album = cur_album(br);
-        if (album == 0xFFFFFFFFu) return 0;
+        if (album == LIBIDX_NONE) return 0;
         return (int)libidx_album_track_count(br->idx, album);
     }
 }
@@ -199,7 +173,7 @@ const char *browse_header(browse_t *br)
 
     default:
         album = cur_album(br);
-        copy_text(br->header, (album == 0xFFFFFFFFu)
+        copy_text(br->header, (album == LIBIDX_NONE)
                                   ? ""
                                   : libidx_album_name(br->idx, album));
         break;
@@ -242,7 +216,7 @@ int browse_fill_rows(browse_t *br, lib_row_t *rows, int max, uint32_t playing)
         case LIB_LEVEL_ALBUM: {
             uint32_t g = libidx_artist_album(br->idx,
                                              (uint32_t)br->artist_sel, abs);
-            if (g == 0xFFFFFFFFu) {
+            if (g == LIBIDX_NONE) {
                 copy_text(br->text[i], "");
             } else {
                 copy_text(br->text[i], libidx_album_name(br->idx, g));
@@ -258,7 +232,7 @@ int browse_fill_rows(browse_t *br, lib_row_t *rows, int max, uint32_t playing)
              * rather than on the row's right edge. */
             rows[i].has_sub = false;
 
-            if (album == 0xFFFFFFFFu ||
+            if (album == LIBIDX_NONE ||
                 libidx_album_track(br->idx, album, abs, &t) != LIB_OK) {
                 /* A failed page read must not leave the previous track's
                  * title on screen under a new row's index. */
@@ -302,7 +276,7 @@ browse_result_t browse_activate(browse_t *br, lib_track_t *out,
 
     default:
         album = cur_album(br);
-        if (album == 0xFFFFFFFFu) return BROWSE_NONE;
+        if (album == LIBIDX_NONE) return BROWSE_NONE;
 
         if (out != NULL) {
             if (libidx_album_track(br->idx, album, (uint32_t)br->track_sel,
