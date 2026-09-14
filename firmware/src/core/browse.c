@@ -43,12 +43,31 @@ static int *top_ptr(browse_t *br)
     }
 }
 
+/* 1 when a pinned row occupies row 0 of the current level, else 0. Only the
+ * artist list has one, so every other level maps rows to items directly. */
+static int pin_offset(const browse_t *br)
+{
+    return (br->pinned != NULL && br->level == LIB_LEVEL_ARTIST) ? 1 : 0;
+}
+
+/* The artist the selection refers to, with the pinned row accounted for.
+ * Returns LIBIDX_NONE when the pinned row itself is selected. */
+static uint32_t sel_artist(const browse_t *br)
+{
+    int i = br->artist_sel - ((br->pinned != NULL) ? 1 : 0);
+    if (i < 0) return LIBIDX_NONE;
+    return (uint32_t)i;
+}
+
 /* Global album index of the selected artist's Nth album. */
 static uint32_t cur_album(const browse_t *br)
 {
+    uint32_t artist;
+
     if (br->idx == NULL) return LIBIDX_NONE;
-    return libidx_artist_album(br->idx, (uint32_t)br->artist_sel,
-                               (uint32_t)br->album_sel);
+    artist = sel_artist(br);
+    if (artist == LIBIDX_NONE) return LIBIDX_NONE;
+    return libidx_artist_album(br->idx, artist, (uint32_t)br->album_sel);
 }
 
 /* Does this album contain the playing track? */
@@ -77,6 +96,12 @@ static bool artist_is_playing(const libidx_t *idx, uint32_t artist,
 
 /* --------------------------------------------------------------- api */
 
+void browse_set_pinned(browse_t *br, const char *label)
+{
+    if (br == NULL) return;
+    br->pinned = label;
+}
+
 void browse_init(browse_t *br, libidx_t *idx)
 {
     if (br == NULL) return;
@@ -98,11 +123,13 @@ int browse_row_count(const browse_t *br)
 
     switch (br->level) {
     case LIB_LEVEL_ARTIST:
-        return (int)libidx_artist_count(br->idx);
+        return (int)libidx_artist_count(br->idx) + pin_offset(br);
 
-    case LIB_LEVEL_ALBUM:
-        return (int)libidx_artist_album_count(br->idx,
-                                              (uint32_t)br->artist_sel);
+    case LIB_LEVEL_ALBUM: {
+        uint32_t artist = sel_artist(br);
+        if (artist == LIBIDX_NONE) return 0;
+        return (int)libidx_artist_album_count(br->idx, artist);
+    }
 
     default:
         album = cur_album(br);
@@ -166,10 +193,13 @@ const char *browse_header(browse_t *br)
         copy_text(br->header, "Artists");
         break;
 
-    case LIB_LEVEL_ALBUM:
-        copy_text(br->header,
-                  libidx_artist_name(br->idx, (uint32_t)br->artist_sel));
+    case LIB_LEVEL_ALBUM: {
+        uint32_t artist = sel_artist(br);
+        copy_text(br->header, (artist == LIBIDX_NONE)
+                                  ? ""
+                                  : libidx_artist_name(br->idx, artist));
         break;
+    }
 
     default:
         album = cur_album(br);
@@ -206,16 +236,33 @@ int browse_fill_rows(browse_t *br, lib_row_t *rows, int max, uint32_t playing)
         rows[i].text = br->text[i];
         rows[i].has_sub = true;
         rows[i].is_current = false;
+        rows[i].is_pinned = false;
 
         switch (br->level) {
-        case LIB_LEVEL_ARTIST:
-            copy_text(br->text[i], libidx_artist_name(br->idx, abs));
-            rows[i].is_current = artist_is_playing(br->idx, abs, playing);
+        case LIB_LEVEL_ARTIST: {
+            int off = pin_offset(br);
+            if (off != 0 && abs == 0u) {
+                /* The pinned row is chrome: no chevron, no play marker, and
+                 * the screen draws it in a quieter colour so the artists
+                 * stay the thing you are looking at. */
+                copy_text(br->text[i], br->pinned);
+                rows[i].has_sub = false;
+                rows[i].is_pinned = true;
+                break;
+            }
+            {
+                uint32_t a = abs - (uint32_t)off;
+                copy_text(br->text[i], libidx_artist_name(br->idx, a));
+                rows[i].is_current = artist_is_playing(br->idx, a, playing);
+            }
             break;
+        }
 
         case LIB_LEVEL_ALBUM: {
-            uint32_t g = libidx_artist_album(br->idx,
-                                             (uint32_t)br->artist_sel, abs);
+            uint32_t artist = sel_artist(br);
+            uint32_t g = (artist == LIBIDX_NONE)
+                       ? LIBIDX_NONE
+                       : libidx_artist_album(br->idx, artist, abs);
             if (g == LIBIDX_NONE) {
                 copy_text(br->text[i], "");
             } else {
@@ -261,6 +308,9 @@ browse_result_t browse_activate(browse_t *br, lib_track_t *out,
 
     switch (br->level) {
     case LIB_LEVEL_ARTIST:
+        if (pin_offset(br) != 0 && br->artist_sel == 0) {
+            return BROWSE_PINNED;
+        }
         br->level = LIB_LEVEL_ALBUM;
         /* A fresh list starts at the top; keeping a stale selection from a
          * different artist would land somewhere arbitrary. */

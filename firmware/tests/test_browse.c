@@ -676,6 +676,172 @@ TEST(fill_rows_respects_a_small_max)
     libidx_close(&g_idx);
 }
 
+
+/* =====================================================================
+ * the pinned row
+ * ===================================================================== */
+
+TEST(without_a_pinned_row_nothing_changes)
+{
+    card_small();
+    CHECK_EQ(build_and_browse(), LIB_OK);
+
+    CHECK_EQ(browse_row_count(&g_br), 2);
+    CHECK_EQ(browse_activate(&g_br, NULL, NULL), BROWSE_DESCENDED);
+
+    libidx_close(&g_idx);
+}
+
+TEST(a_pinned_row_sits_above_the_artists)
+{
+    int n;
+
+    card_small();
+    CHECK_EQ(build_and_browse(), LIB_OK);
+    browse_set_pinned(&g_br, "Settings");
+
+    CHECK_EQ(browse_row_count(&g_br), 3);      /* 2 artists + the pin */
+
+    n = browse_fill_rows(&g_br, g_rows, BROWSE_MAX_ROWS,
+                         BROWSE_NOTHING_PLAYING);
+    CHECK_EQ(n, 3);
+    CHECK(strcmp(g_rows[0].text, "Settings") == 0);
+    CHECK(g_rows[0].is_pinned);
+    CHECK(!g_rows[0].has_sub);                 /* chrome, not content */
+    CHECK(!g_rows[0].is_current);
+
+    CHECK(strcmp(g_rows[1].text, "Aphex Twin") == 0);
+    CHECK(!g_rows[1].is_pinned);
+    CHECK(g_rows[1].has_sub);
+    CHECK(strcmp(g_rows[2].text, "Boards of Canada") == 0);
+
+    libidx_close(&g_idx);
+}
+
+TEST(activating_the_pinned_row_reports_it_without_descending)
+{
+    card_small();
+    CHECK_EQ(build_and_browse(), LIB_OK);
+    browse_set_pinned(&g_br, "Settings");
+
+    CHECK_EQ(browse_selected(&g_br), 0);
+    CHECK_EQ(browse_activate(&g_br, NULL, NULL), BROWSE_PINNED);
+    CHECK_EQ(browse_level(&g_br), LIB_LEVEL_ARTIST);   /* stayed put */
+
+    libidx_close(&g_idx);
+}
+
+TEST(artists_still_open_correctly_with_a_pin_present)
+{
+    int n;
+
+    card_small();
+    CHECK_EQ(build_and_browse(), LIB_OK);
+    browse_set_pinned(&g_br, "Settings");
+
+    /* row 1 is the first artist */
+    browse_move(&g_br, 1);
+    CHECK_EQ(browse_activate(&g_br, NULL, NULL), BROWSE_DESCENDED);
+    CHECK(strcmp(browse_header(&g_br), "Aphex Twin") == 0);
+    CHECK_EQ(browse_row_count(&g_br), 2);
+
+    /* row 2 is the second artist — the off-by-one that a pinned row invites */
+    CHECK(browse_back(&g_br));
+    browse_move(&g_br, 1);
+    CHECK_EQ(browse_selected(&g_br), 2);
+    CHECK_EQ(browse_activate(&g_br, NULL, NULL), BROWSE_DESCENDED);
+    CHECK(strcmp(browse_header(&g_br), "Boards of Canada") == 0);
+
+    n = browse_fill_rows(&g_br, g_rows, BROWSE_MAX_ROWS,
+                         BROWSE_NOTHING_PLAYING);
+    CHECK_EQ(n, 1);
+    CHECK(strcmp(g_rows[0].text, "Geogaddi") == 0);
+
+    libidx_close(&g_idx);
+}
+
+TEST(a_track_under_a_pinned_artist_list_still_resolves)
+{
+    lib_track_t t;
+    uint32_t gi = 999u;
+
+    card_small();
+    CHECK_EQ(build_and_browse(), LIB_OK);
+    browse_set_pinned(&g_br, "Settings");
+
+    browse_move(&g_br, 2);                     /* Boards of Canada */
+    CHECK_EQ(browse_activate(&g_br, NULL, NULL), BROWSE_DESCENDED);
+    CHECK_EQ(browse_activate(&g_br, NULL, NULL), BROWSE_DESCENDED);
+    CHECK_EQ(browse_activate(&g_br, &t, &gi), BROWSE_PLAY);
+
+    CHECK(strcmp(t.title, "Ready Lets Go") == 0);
+    CHECK(strcmp(t.path,
+                 "/Music/Boards of Canada/Geogaddi/01 Ready Lets Go.mp3") == 0);
+
+    libidx_close(&g_idx);
+}
+
+TEST(the_play_marker_still_lands_on_the_right_artist_with_a_pin)
+{
+    uint32_t playing;
+    lib_track_t t;
+    int n;
+
+    card_small();
+    CHECK_EQ(build_and_browse(), LIB_OK);
+    browse_set_pinned(&g_br, "Settings");
+
+    browse_move(&g_br, 2);                     /* Boards of Canada */
+    CHECK_EQ(browse_activate(&g_br, NULL, NULL), BROWSE_DESCENDED);
+    CHECK_EQ(browse_activate(&g_br, NULL, NULL), BROWSE_DESCENDED);
+    CHECK_EQ(browse_activate(&g_br, &t, &playing), BROWSE_PLAY);
+
+    CHECK(browse_back(&g_br));
+    CHECK(browse_back(&g_br));
+
+    n = browse_fill_rows(&g_br, g_rows, BROWSE_MAX_ROWS, playing);
+    CHECK_EQ(n, 3);
+    CHECK(!g_rows[0].is_current);              /* the pin is never playing */
+    CHECK(!g_rows[1].is_current);
+    CHECK(g_rows[2].is_current);               /* Boards of Canada */
+
+    libidx_close(&g_idx);
+}
+
+TEST(a_pin_can_be_removed_again)
+{
+    card_small();
+    CHECK_EQ(build_and_browse(), LIB_OK);
+
+    browse_set_pinned(&g_br, "Settings");
+    CHECK_EQ(browse_row_count(&g_br), 3);
+
+    browse_set_pinned(&g_br, NULL);
+    CHECK_EQ(browse_row_count(&g_br), 2);
+    CHECK_EQ(browse_activate(&g_br, NULL, NULL), BROWSE_DESCENDED);
+
+    libidx_close(&g_idx);
+}
+
+TEST(a_pinned_row_on_an_empty_library_is_still_reachable)
+{
+    int n;
+
+    card_reset();
+    CHECK_EQ(build_and_browse(), LIB_OK);
+    browse_set_pinned(&g_br, "Settings");
+
+    /* No music is exactly when you need to get to Settings. */
+    CHECK_EQ(browse_row_count(&g_br), 1);
+    n = browse_fill_rows(&g_br, g_rows, BROWSE_MAX_ROWS,
+                         BROWSE_NOTHING_PLAYING);
+    CHECK_EQ(n, 1);
+    CHECK(g_rows[0].is_pinned);
+    CHECK_EQ(browse_activate(&g_br, NULL, NULL), BROWSE_PINNED);
+
+    libidx_close(&g_idx);
+}
+
 int main(void)
 {
     printf("browse\n");
@@ -690,6 +856,15 @@ int main(void)
     RUN(moving_clamps_at_both_ends);
     RUN(an_empty_library_is_safe_to_browse);
     RUN(a_null_index_is_safe_to_browse);
+
+    RUN(without_a_pinned_row_nothing_changes);
+    RUN(a_pinned_row_sits_above_the_artists);
+    RUN(activating_the_pinned_row_reports_it_without_descending);
+    RUN(artists_still_open_correctly_with_a_pin_present);
+    RUN(a_track_under_a_pinned_artist_list_still_resolves);
+    RUN(the_play_marker_still_lands_on_the_right_artist_with_a_pin);
+    RUN(a_pin_can_be_removed_again);
+    RUN(a_pinned_row_on_an_empty_library_is_still_reachable);
 
     RUN(a_long_album_fills_only_the_visible_window);
     RUN(scrolling_a_long_album_stays_cheap);

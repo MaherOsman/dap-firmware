@@ -310,3 +310,33 @@ const char *plat_libio_result_name(int fres)
 
 unsigned plat_libio_peak_files(void) { return s_peak_files; }
 unsigned plat_libio_peak_dirs(void)  { return s_peak_dirs; }
+
+/*
+ * The one FatFs binding, shared.
+ *
+ * The index was the first thing to need card access; settings are the
+ * second and there will be more (album art cache, playlists). Each growing
+ * its own copy of this vtable would mean several places to fix when the
+ * seam changes, so there is one and everything borrows it.
+ *
+ * Deliberately does NOT reset the handle pools the way plat_libio_init
+ * does — it can be called at any time, including while a file is open.
+ */
+const lib_io_t *plat_libio_shared(void)
+{
+    static lib_io_t io;
+    static int ready;
+
+    if (!ready) {
+        memset(&io, 0, sizeof(io));
+        io.ctx = 0;
+        io.open = p_open;
+        io.read = p_read;
+        io.write = p_write;
+        io.seek = p_seek;
+        io.close = p_close;
+        io.unlink = p_unlink;
+        ready = 1;
+    }
+    return &io;
+}

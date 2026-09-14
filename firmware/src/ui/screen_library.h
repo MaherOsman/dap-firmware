@@ -25,8 +25,10 @@ typedef struct {
     const char *text;
     bool        has_sub;     /* artist/album — draws a › chevron */
     bool        is_current;  /* contains or is the playing track */
+    /* Chrome rather than content — the Settings row above the artists, and
+     * whatever the sidebar pins there later. Drawn quieter and underlined. */
+    bool        is_pinned;
 } lib_row_t;
-
 /*
  * Draws a window of rows rather than the whole level: rows[0] is the row at
  * scroll_top, window_count is how many are supplied, total_count is how many

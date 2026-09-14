@@ -27,4 +27,9 @@ int dap_library_init(int force_rescan);
 /* The open index, or NULL if it isn't open. Valid until the next init. */
 libidx_t *dap_library(void);
 
+/* Forces a rescan and reopens the index. The library pointer from
+ * dap_library() stays valid across this, but everything derived from the
+ * old index (browse position, the playing track index) does not. */
+int dap_library_rescan(void);
+
 #endif /* PLATFORM_LIBRARY_H */

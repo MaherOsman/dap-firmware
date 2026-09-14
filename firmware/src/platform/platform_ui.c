@@ -13,6 +13,10 @@
 #include "screen_library.h"
 #include "screen_now_playing.h"
 #include "platform_audio.h"
+#include "platform_libio.h"
+#include "platform_library.h"
+#include "config.h"
+#include "screen_settings.h"
 
 /* Repaint cadence while a track plays, so the scrubber and elapsed time
  * move without the encoder being touched. 500 ms is twice the resolution
@@ -41,7 +45,9 @@ static playqueue_t g_pq;
 static ui_screen_t g_screen = UI_LIBRARY;
 static np_state_t  g_np;
 
-static lib_row_t g_rows[BROWSE_MAX_ROWS];
+static lib_row_t   g_rows[BROWSE_MAX_ROWS];
+static dap_config_t g_cfg;
+static settings_t   g_settings;
 static bool      g_dirty = true;
 static uint32_t  g_last_paint;
 
@@ -53,7 +59,29 @@ static char g_artist[64];
 static char g_album[64];
 static char g_path[LIB_PATH_MAX + 1];
 
+/* Live rather than constant: changing the theme in Settings repaints every
+ * screen immediately, which is what makes choosing one feel like choosing
+ * rather than guessing. */
 static const theme_t *g_theme = &THEME_DARK;
+
+static void apply_theme(uint8_t idx)
+{
+    if (THEME_COUNT > 0 && idx < (uint8_t)THEME_COUNT) {
+        g_theme = ALL_THEMES[idx];
+    }
+}
+
+/* Settings are written the moment they change — there is no save button, so
+ * there is no unsaved state to lose if the battery dies. A failed write is
+ * worth saying out loud: silently not saving is the failure people notice
+ * three boots later. */
+static void save_config(void)
+{
+    if (!config_save(&g_cfg, plat_libio_shared(), CFG_PATH)) {
+        printf("config: save FAILED (%s)\r\n",
+               plat_libio_result_name(plat_libio_last_result()));
+    }
+}
 
 /* ------------------------------------------------------------------ */
 
@@ -143,8 +171,22 @@ void dap_ui_init(gfx_t *fb, st7789_t *tft, libidx_t *idx)
     g_tft = tft;
     g_idx = idx;
 
+    /* A missing or corrupt settings file is not an error worth stopping
+     * for — config_load leaves defaults either way. */
+    if (!config_load(&g_cfg, plat_libio_shared(), CFG_PATH)) {
+        printf("config: using defaults\r\n");
+    }
+    apply_theme(g_cfg.theme);
+    settings_init(&g_settings, g_cfg.theme, g_cfg.repeat);
+
     browse_init(&g_browse, idx);
+    browse_set_pinned(&g_browse, "Settings");
     pq_init(&g_pq, idx);
+    pq_set_repeat(&g_pq, (pq_repeat_t)g_cfg.repeat);
+
+    /* plat_audio_set_volume takes a delta, so restoring an absolute level
+     * means asking where it currently is. */
+    (void)plat_audio_set_volume((int)g_cfg.volume - (int)plat_audio_volume());
 
     memset(&g_np, 0, sizeof(g_np));
     g_np.enabled = NP_CTL_DEFAULT;
@@ -169,29 +211,21 @@ static void input_library(int delta, int btn)
     }
 
     if (btn == 1) {
-        if (browse_activate(&g_browse, &t, &gi) == BROWSE_PLAY) {
-            /* Selecting the track that is already playing means "show me
-             * it", not "start it again" — restarting would throw away the
-             * position for a press that looks like navigation. */
-            if (gi == pq_current(&g_pq) && plat_audio_is_active()) {
+        browse_result_t r = browse_activate(&g_browse, &t, &gi);
+
+        if (r == BROWSE_PINNED) {
+            g_screen = UI_SETTINGS;
+        } else if (r == BROWSE_PLAY) {
+            if (start_track(gi)) {
+                /* Choosing a track means you want to watch it play. */
                 g_screen = UI_NOW_PLAYING;
-            } else if (start_track(gi)) {
-                g_screen = UI_NOW_PLAYING;
-            }
-            if (g_screen == UI_NOW_PLAYING) {
                 g_np.focus = NP_CTL_PLAY;
                 g_np.vol_active = false;
             }
         }
         g_dirty = true;
     } else if (btn == 2) {
-        /* At the top of the library there is nowhere further up, so the
-         * gesture is free: use it to return to whatever is playing. */
-        if (!browse_back(&g_browse) && pq_current(&g_pq) != PQ_NO_TRACK) {
-            g_screen = UI_NOW_PLAYING;
-            g_np.focus = NP_CTL_PLAY;
-            g_np.vol_active = false;
-        }
+        browse_back(&g_browse);
         g_dirty = true;
     }
 }
@@ -209,6 +243,12 @@ static void activate_control(void)
         /* A mode, not an action: the turn changes meaning until it is
          * pressed again. The overlay is what makes that visible. */
         g_np.vol_active = !g_np.vol_active;
+        if (!g_np.vol_active) {
+            /* Saved on leaving the mode rather than on every detent — a
+             * card write per click of the encoder would be absurd. */
+            g_cfg.volume = plat_audio_volume();
+            save_config();
+        }
         break;
 
     case NP_CTL_INFO:
@@ -253,6 +293,60 @@ static void input_now_playing(int delta, int btn)
     }
 }
 
+static void do_rescan(void)
+{
+    /* Everything derived from the old index dies with it: the playing
+     * track index, the browse position, the cached strings. Rebuilding
+     * them is cheaper than trying to map them across. */
+    plat_audio_stop();
+    pq_stop(&g_pq);
+    capture_track(PQ_NO_TRACK);
+
+    (void)dap_library_rescan();
+
+    g_idx = dap_library();
+    browse_init(&g_browse, g_idx);
+    browse_set_pinned(&g_browse, "Settings");
+    pq_init(&g_pq, g_idx);
+    pq_set_repeat(&g_pq, (pq_repeat_t)g_cfg.repeat);
+}
+
+static void input_settings(int delta, int btn)
+{
+    if (delta != 0) {
+        settings_move(&g_settings, delta);
+        g_dirty = true;
+    }
+
+    if (btn == 1) {
+        switch (settings_activate(&g_settings)) {
+        case SET_ID_THEME:
+            g_cfg.theme = settings_value(&g_settings, SET_ID_THEME);
+            apply_theme(g_cfg.theme);   /* immediately, on this very frame */
+            save_config();
+            break;
+
+        case SET_ID_REPEAT:
+            g_cfg.repeat = settings_value(&g_settings, SET_ID_REPEAT);
+            pq_set_repeat(&g_pq, (pq_repeat_t)g_cfg.repeat);
+            save_config();
+            break;
+
+        case SET_ID_RESCAN:
+            do_rescan();
+            g_screen = UI_LIBRARY;
+            break;
+
+        default:
+            break;
+        }
+        g_dirty = true;
+    } else if (btn == 2) {
+        g_screen = UI_LIBRARY;
+        g_dirty = true;
+    }
+}
+
 static void input_info(int delta, int btn)
 {
     (void)delta;
@@ -269,6 +363,7 @@ void dap_ui_input(int delta, int btn)
     switch (g_screen) {
     case UI_NOW_PLAYING: input_now_playing(delta, btn); break;
     case UI_INFO:        input_info(delta, btn);        break;
+    case UI_SETTINGS:    input_settings(delta, btn);    break;
     case UI_LIBRARY:
     default:             input_library(delta, btn);     break;
     }
@@ -313,6 +408,10 @@ static void paint(void)
         screen_info_draw(g_fb, g_theme, &g_np);
         break;
 
+    case UI_SETTINGS:
+        screen_settings_draw(g_fb, g_theme, &g_settings);
+        break;
+
     case UI_LIBRARY:
     default: {
         int n = browse_fill_rows(&g_browse, g_rows, BROWSE_MAX_ROWS,
@@ -352,7 +451,7 @@ void dap_ui_tick(void)
     /* The scrubber has to move on its own, but only while something is
      * actually playing — repainting an idle screen twice a second would
      * burn SPI bandwidth for nothing. */
-    if (!g_dirty && g_screen != UI_LIBRARY &&
+    if (!g_dirty && g_screen == UI_NOW_PLAYING &&
         pq_state(&g_pq) == PQ_PLAYING &&
         (now - g_last_paint) >= TICK_REDRAW_MS) {
         g_dirty = true;

@@ -27,10 +27,14 @@
 #include "st7789.h"
 #include "library_index.h"
 
+/* Destinations. The sidebar this is heading towards adds Recents,
+ * Favorites and Playlists here; each is a screen plus an input handler,
+ * which is why the dispatch is a switch rather than nested conditions. */
 typedef enum {
     UI_LIBRARY = 0,
     UI_NOW_PLAYING,
-    UI_INFO
+    UI_INFO,
+    UI_SETTINGS
 } ui_screen_t;
 
 /* `idx` may be NULL — the library screen shows empty and nothing crashes. */

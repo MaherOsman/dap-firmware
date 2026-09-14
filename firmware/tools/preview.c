@@ -65,6 +65,7 @@ static const char *TRACKS[] = {
 static void render_artist_level(const theme_t *t, const char *out)
 {
     lib_row_t rows[N_ARTISTS];
+    memset(rows, 0, sizeof(rows));
     for (int i = 0; i < N_ARTISTS; i++) {
         rows[i].text       = ARTISTS[i];
         rows[i].has_sub    = true;
@@ -81,6 +82,7 @@ static void render_artist_level(const theme_t *t, const char *out)
 static void render_track_level(const theme_t *t, const char *out)
 {
     lib_row_t rows[N_TRACKS];
+    memset(rows, 0, sizeof(rows));
     for (int i = 0; i < N_TRACKS; i++) {
         rows[i].text       = TRACKS[i];
         rows[i].has_sub    = false;

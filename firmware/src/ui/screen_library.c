@@ -131,8 +131,19 @@ void screen_library_draw_window(gfx_t *g, const theme_t *t,
                            : is_current ? t->accent
                                         : t->text_secondary;
 
+        /* A pinned row is chrome, not content: quieter than an artist when
+         * it is not selected, and underlined to separate it from the list
+         * proper. The artists stay the thing you are looking at. */
+        if (row->is_pinned && !is_sel) {
+            text_col = t->text_inactive;
+        }
+
         gfx_text_ellipsis(g, &font_sm, row->text ? row->text : "",
                           text_x, text_y, avail_w, text_col);
+
+        if (row->is_pinned) {
+            gfx_hline(g, 0, row_y + LIB_ROW_H - 1, SCREEN_W, t->surface_alt);
+        }
     }
 
     gfx_clip_reset(g);

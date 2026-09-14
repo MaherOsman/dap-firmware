@@ -201,3 +201,15 @@ libidx_t *dap_library(void)
 {
     return g_open ? &g_idx : 0;
 }
+
+int dap_library_rescan(void)
+{
+    /* The index is rebuilt in place, so every track index taken from the
+     * old one is meaningless afterwards. Callers must reset whatever they
+     * derived from it — that is the UI's job, not this file's. */
+    if (g_open) {
+        libidx_close(&g_idx);
+        g_open = 0;
+    }
+    return dap_library_init(1);
+}

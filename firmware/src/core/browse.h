@@ -44,7 +44,8 @@
 typedef enum {
     BROWSE_NONE = 0,   /* nothing to activate (empty level)         */
     BROWSE_DESCENDED,  /* moved a level deeper                      */
-    BROWSE_PLAY        /* a track was chosen; `out` is filled       */
+    BROWSE_PLAY,       /* a track was chosen; `out` is filled       */
+    BROWSE_PINNED      /* the pinned row was chosen                 */
 } browse_result_t;
 
 typedef struct {
@@ -56,6 +57,9 @@ typedef struct {
     int artist_sel, album_sel, track_sel;
     int artist_top, album_top, track_top;
 
+    /* Optional row pinned above the artist list. NULL when absent. */
+    const char *pinned;
+
     /* Row text storage — see rule 1 above. */
     char text[BROWSE_MAX_ROWS][BROWSE_TEXT_MAX];
     char header[BROWSE_TEXT_MAX];
@@ -64,6 +68,16 @@ typedef struct {
 /* `idx` may be NULL or an empty library; every call stays safe and reports
  * zero rows. */
 void browse_init(browse_t *br, libidx_t *idx);
+
+/*
+ * Pins a row above the artist list — the way into Settings today, and the
+ * way into a sidebar later. It is drawn as chrome rather than content
+ * (is_pinned on the row), and activating it returns BROWSE_PINNED so this
+ * module never learns what the row means.
+ *
+ * `label` is borrowed and must outlive the browse_t. NULL removes it.
+ */
+void browse_set_pinned(browse_t *br, const char *label);
 
 lib_level_t browse_level(const browse_t *br);
 int         browse_row_count(const browse_t *br);
