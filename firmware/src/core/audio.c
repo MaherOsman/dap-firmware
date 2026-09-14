@@ -121,3 +121,41 @@ int32_t audio_peak(const int32_t *buf, size_t samples)
     }
     return peak;
 }
+
+/*
+ * Applies a gain that slides linearly from `from_q16` to `to_q16` across the
+ * block, instead of snapping to the new level at the block boundary.
+ *
+ * Volume is applied when audio is buffered, not when it is played, so a
+ * level change leaves old-gain samples already sitting in the ring followed
+ * by new-gain samples. That junction is a step in the waveform and it
+ * clicks — the same reason a hard edit pops in a DAW. Spreading the change
+ * over a block's worth of samples makes it inaudible.
+ *
+ * Per sample rather than per frame: left and right end up one ramp step
+ * apart, which is far below anything audible and avoids caring about
+ * channel count here.
+ */
+void audio_apply_gain_ramp(int32_t *buf, size_t samples,
+                           uint32_t from_q16, uint32_t to_q16)
+{
+    int64_t from, diff;
+    size_t i;
+
+    if (samples == 0u) {
+        return;
+    }
+    if (from_q16 == to_q16) {
+        audio_apply_gain(buf, samples, to_q16);   /* nothing moving */
+        return;
+    }
+
+    from = (int64_t)from_q16;
+    diff = (int64_t)to_q16 - (int64_t)from_q16;
+
+    for (i = 0; i < samples; i++) {
+        int64_t g = from + (diff * (int64_t)i) / (int64_t)samples;
+        int64_t v = ((int64_t)buf[i] * g) >> 16;
+        buf[i] = audio_sat32(v);
+    }
+}

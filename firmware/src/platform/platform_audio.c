@@ -34,6 +34,7 @@ static decoder_info_t g_info;      /* remaining in the data chunk */
 static bool     g_file_open;
 static bool     g_dma_running;
 static uint32_t g_refill_max_ms;
+static uint32_t g_gain_q16 = 65536u;   /* last gain actually applied */
 
 /* Written by the ISR, drained by the main loop. */
 static volatile uint32_t g_isr_frames;
@@ -90,8 +91,15 @@ static void refill_from_file(void)
     if (got == 0) { player_set_exhausted(&g_pl, true); return; }
 
     size_t samples = got * 2u;
-    if (g_pl.volume < 100)
-        audio_apply_gain(g_unpack, samples, audio_volume_q16(g_pl.volume));
+    {
+        uint32_t want = audio_volume_q16(g_pl.volume);
+        if (want != g_gain_q16) {
+            audio_apply_gain_ramp(g_unpack, samples, g_gain_q16, want);
+            g_gain_q16 = want;
+        } else if (want != 65536u) {
+            audio_apply_gain(g_unpack, samples, want);
+        }
+    }
 
     rb_write(&g_rb, (const uint8_t *)g_unpack, samples * sizeof(int32_t));
 }
@@ -151,6 +159,7 @@ static uint32_t fatfs_size(void *ctx)
 
 int plat_audio_play(const char *path)
 {
+    g_gain_q16 = audio_volume_q16(g_pl.volume);
     plat_audio_stop();
 
     if (f_open(&g_fil, path, FA_READ) != FR_OK) {

@@ -170,16 +170,28 @@ static void input_library(int delta, int btn)
 
     if (btn == 1) {
         if (browse_activate(&g_browse, &t, &gi) == BROWSE_PLAY) {
-            if (start_track(gi)) {
-                /* Choosing a track means you want to watch it play. */
+            /* Selecting the track that is already playing means "show me
+             * it", not "start it again" — restarting would throw away the
+             * position for a press that looks like navigation. */
+            if (gi == pq_current(&g_pq) && plat_audio_is_active()) {
                 g_screen = UI_NOW_PLAYING;
+            } else if (start_track(gi)) {
+                g_screen = UI_NOW_PLAYING;
+            }
+            if (g_screen == UI_NOW_PLAYING) {
                 g_np.focus = NP_CTL_PLAY;
                 g_np.vol_active = false;
             }
         }
         g_dirty = true;
     } else if (btn == 2) {
-        browse_back(&g_browse);
+        /* At the top of the library there is nowhere further up, so the
+         * gesture is free: use it to return to whatever is playing. */
+        if (!browse_back(&g_browse) && pq_current(&g_pq) != PQ_NO_TRACK) {
+            g_screen = UI_NOW_PLAYING;
+            g_np.focus = NP_CTL_PLAY;
+            g_np.vol_active = false;
+        }
         g_dirty = true;
     }
 }
