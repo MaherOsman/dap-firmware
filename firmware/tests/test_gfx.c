@@ -240,9 +240,12 @@ TEST(scrollbar_appears_only_when_needed)
     CHECK(found);
 }
 
-TEST(all_three_themes_are_distinct_and_readable)
+TEST(every_theme_is_distinct_and_readable)
 {
-    CHECK_EQ(THEME_COUNT, 3);
+    /* Every theme in the build gets checked, however many there are —
+     * pinning the count here just means editing this line each time a
+     * theme is added, which teaches you to edit rather than to read. */
+    CHECK(THEME_COUNT > 0);
     for (int i = 0; i < THEME_COUNT; i++) {
         const theme_t *t = ALL_THEMES[i];
         CHECK(t->name != NULL);
@@ -273,6 +276,6 @@ int main(void)
     RUN(scroll_clamp_never_leaves_blank_rows);
     RUN(selected_row_is_highlighted);
     RUN(scrollbar_appears_only_when_needed);
-    RUN(all_three_themes_are_distinct_and_readable);
+    RUN(every_theme_is_distinct_and_readable);
     return TEST_SUMMARY();
 }

@@ -73,6 +73,40 @@ const theme_t *const ALL_THEMES[] = {
     &THEME_DARK,
     &THEME_WARM,
     &THEME_IPOD,
+    &THEME_MIDNIGHT,
+    &THEME_MIDNIGHT,
 };
 
-const int THEME_COUNT = 3;
+const int THEME_COUNT = 4;
+
+/* Midnight — near-black greys with soft stone text.
+ *
+ * The background is #121416 rather than pure black on purpose: an OLED-style
+ * true black flattens the surfaces against each other, and the ST7789 is an
+ * IPS panel anyway, so #000000 buys nothing and loses the sense of depth
+ * between bg, surface and surface_alt.
+ *
+ * The accent is a desaturated stone-blue rather than a saturated colour —
+ * bright enough to find the selection at a glance, quiet enough that a
+ * scrubber and a highlighted row do not shout over the text. */
+const theme_t THEME_MIDNIGHT = {
+    .name               = "Midnight",
+    .bg                 = 0x10A2,  /* #121416 */
+    .surface            = 0x18E4,  /* #1A1D21 */
+    .surface_alt        = 0x2145,  /* #262A2F */
+    .text_primary       = 0xE75D,  /* #E6E8EA */
+    .text_secondary     = 0xAD76,  /* #A8AEB5 */
+    .text_inactive      = 0x5B0D,  /* #5C6368 */
+    .accent             = 0x9D99,  /* #9FB3C8 */
+    .accent_dim         = 0x2987,  /* #2C333B */
+    .icon_active        = 0xE75D,  /* #E6E8EA */
+    .icon_inactive      = 0x5B0D,  /* #5C6368 */
+    .art_placeholder_bg = 0x18E4,  /* #1A1D21 */
+    .art_placeholder_fg = 0x31C8,  /* #333A42 */
+    .bar_height         = 2,
+    .pill_width         = 3,
+    .pill_height        = 14,
+    .pill_radius        = 1,
+    .topbar_height      = 24,
+    .controls_height    = 32,
+};

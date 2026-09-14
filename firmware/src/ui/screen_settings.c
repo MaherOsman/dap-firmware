@@ -8,7 +8,7 @@
 
 #define MARGIN 10
 
-static const char *const THEME_VALUES[] = { "Dark", "Warm", "iPod" };
+static const char *const THEME_VALUES[] = { "Dark", "Warm", "iPod", "Midnight" };
 static const char *const REPEAT_VALUES[] = { "Off", "Once", "All" };
 
 #define N_THEME_VALUES  ((uint8_t)(sizeof(THEME_VALUES) / sizeof(THEME_VALUES[0])))
