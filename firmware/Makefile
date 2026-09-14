@@ -57,9 +57,9 @@ $(BUILD)/%: tests/%.c $(CORE) $(DRIVERS) $(UI) $(VENDOR_OBJ) | $(BUILD)
 	$(CC) $(CFLAGS) -o $@ $< $(CORE) $(DRIVERS) $(UI) $(VENDOR_OBJ)
 
 # Render real 240x240 screens to images you can look at.
-preview: | $(BUILD)
+preview: $(VENDOR_OBJ) | $(BUILD)
 	@mkdir -p $(BUILD)/preview
-	$(CC) $(CFLAGS) -o $(BUILD)/preview_gen tools/preview.c $(CORE) $(UI)
+	$(CC) $(CFLAGS) -o $(BUILD)/preview_gen tools/preview.c $(CORE) $(UI) $(VENDOR_OBJ)
 	./$(BUILD)/preview_gen
 
 test: $(BINS)
