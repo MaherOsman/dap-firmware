@@ -151,7 +151,7 @@ int main(void)
 
     gfx_init(&fb, fb_storage, SCREEN_W, SCREEN_H);
     /* Landscape. If the picture comes up upside down, use 3 instead. */
-    st7789_init(&tft, &platform_st7789_bus, 1);
+    st7789_init(&tft, &platform_st7789_bus, 3);
 
     /* Green flash proves the panel is alive. The panel retains its last
      * image across resets, so this must be a colour no screen uses. */
