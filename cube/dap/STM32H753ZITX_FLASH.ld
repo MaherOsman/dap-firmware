@@ -155,6 +155,19 @@ SECTIONS
     __bss_end__ = _ebss;
   } >RAM_D1
 
+  /* D2 SRAM (0x30000000, 288 KB): uninitialised buffers that do not fit
+     in AXI SRAM, which the framebuffer and audio nearly fill. Album art's
+     decode workspace and cached cover live here (platform_art.c). NOLOAD:
+     start-up neither copies nor zeroes it; the owning code clears it after
+     enabling the D2 SRAM clocks. */
+  .ram_d2 (NOLOAD) :
+  {
+    . = ALIGN(32);
+    *(.ram_d2)
+    *(.ram_d2*)
+    . = ALIGN(32);
+  } >RAM_D2
+
   /* User_heap_stack section, used to check that there is enough RAM left */
   ._user_heap_stack :
   {

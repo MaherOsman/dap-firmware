@@ -15,6 +15,7 @@
 #include "platform_audio.h"
 #include "platform_libio.h"
 #include "platform_library.h"
+#include "platform_art.h"
 #include "config.h"
 #include "screen_settings.h"
 
@@ -126,6 +127,18 @@ static void capture_track(uint32_t track)
  * deliberately not touched here. */
 static void refresh_np(void)
 {
+    /* Album art — only for the now-playing screen itself. The cache makes
+     * this free after the first call per album; the first call decodes. */
+    g_np.art = NULL;
+    g_np.art_size = 0u;
+    if (g_screen == UI_NOW_PLAYING && g_idx != NULL &&
+        pq_current(&g_pq) != PQ_NO_TRACK) {
+        int size = np_art_size(g_np.layout);
+        uint32_t album = libidx_album_of_track(g_idx, pq_current(&g_pq));
+        g_np.art = plat_art_for(album, g_path, size);
+        if (g_np.art != NULL) g_np.art_size = (uint16_t)size;
+    }
+
     g_np.title  = g_title;
     g_np.artist = g_artist;
     g_np.album  = g_album;
@@ -172,6 +185,7 @@ static bool start_track(uint32_t track)
 
 void dap_ui_init(gfx_t *fb, st7789_t *tft, libidx_t *idx)
 {
+    plat_art_init();
     g_fb = fb;
     g_tft = tft;
     g_idx = idx;
@@ -338,6 +352,7 @@ static void do_rescan(void)
     plat_audio_stop();
     pq_stop(&g_pq);
     capture_track(PQ_NO_TRACK);
+    plat_art_forget();          /* album numbers are about to change */
 
     (void)dap_library_rescan();
 
