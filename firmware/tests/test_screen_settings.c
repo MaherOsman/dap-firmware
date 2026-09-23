@@ -43,9 +43,9 @@ static int pixels_set(void)
 
 TEST(the_table_starts_with_the_values_it_was_given)
 {
-    settings_init(&g_set, 1u, 2u);
+    settings_init(&g_set, 1u, 2u, 0u);
 
-    CHECK_EQ(settings_count(&g_set), 3);
+    CHECK_EQ(settings_count(&g_set), 4);
     CHECK_EQ(settings_selected(&g_set), 0);
     CHECK_EQ(settings_value(&g_set, SET_ID_THEME), 1u);
     CHECK_EQ(settings_value(&g_set, SET_ID_REPEAT), 2u);
@@ -53,7 +53,7 @@ TEST(the_table_starts_with_the_values_it_was_given)
 
 TEST(out_of_range_starting_values_fall_back_to_the_first)
 {
-    settings_init(&g_set, 200u, 200u);
+    settings_init(&g_set, 200u, 200u, 0u);
     CHECK_EQ(settings_value(&g_set, SET_ID_THEME), 0u);
     CHECK_EQ(settings_value(&g_set, SET_ID_REPEAT), 0u);
 }
@@ -62,7 +62,7 @@ TEST(activating_a_value_row_cycles_it)
 {
     int i;
 
-    settings_init(&g_set, 0u, 0u);
+    settings_init(&g_set, 0u, 0u, 0u);
 
     CHECK_EQ(settings_activate(&g_set), SET_ID_THEME);
     CHECK_EQ(settings_value(&g_set, SET_ID_THEME), 1u);
@@ -79,8 +79,8 @@ TEST(activating_a_value_row_cycles_it)
 
 TEST(activating_an_action_row_changes_nothing)
 {
-    settings_init(&g_set, 1u, 1u);
-    settings_move(&g_set, 2);          /* Rescan card */
+    settings_init(&g_set, 1u, 1u, 0u);
+    settings_move(&g_set, 3);          /* Rescan card */
 
     CHECK_EQ(settings_activate(&g_set), SET_ID_RESCAN);
     /* the other rows are untouched */
@@ -92,7 +92,7 @@ TEST(activating_an_action_row_changes_nothing)
 
 TEST(each_row_cycles_independently)
 {
-    settings_init(&g_set, 0u, 0u);
+    settings_init(&g_set, 0u, 0u, 0u);
 
     settings_move(&g_set, 1);
     CHECK_EQ(settings_activate(&g_set), SET_ID_REPEAT);
@@ -102,19 +102,19 @@ TEST(each_row_cycles_independently)
 
 TEST(selection_clamps_at_both_ends)
 {
-    settings_init(&g_set, 0u, 0u);
+    settings_init(&g_set, 0u, 0u, 0u);
 
     settings_move(&g_set, -5);
     CHECK_EQ(settings_selected(&g_set), 0);
     settings_move(&g_set, 99);
-    CHECK_EQ(settings_selected(&g_set), 2);
+    CHECK_EQ(settings_selected(&g_set), 3);
     settings_move(&g_set, 1);
-    CHECK_EQ(settings_selected(&g_set), 2);
+    CHECK_EQ(settings_selected(&g_set), 3);
 }
 
 TEST(a_value_can_be_set_from_outside)
 {
-    settings_init(&g_set, 0u, 0u);
+    settings_init(&g_set, 0u, 0u, 0u);
 
     settings_set_value(&g_set, SET_ID_THEME, 2u);
     CHECK_EQ(settings_value(&g_set, SET_ID_THEME), 2u);
@@ -131,7 +131,7 @@ TEST(a_value_can_be_set_from_outside)
 TEST(there_is_a_name_for_every_theme_the_build_has)
 {
     /* A theme with no label would be selectable and unreadable. */
-    settings_init(&g_set, 0u, 0u);
+    settings_init(&g_set, 0u, 0u, 0u);
     {
         int cycles = 0;
         uint8_t first = settings_value(&g_set, SET_ID_THEME);
@@ -147,7 +147,7 @@ TEST(there_is_a_name_for_every_theme_the_build_has)
 
 TEST(helpers_are_null_safe)
 {
-    settings_init(NULL, 0u, 0u);
+    settings_init(NULL, 0u, 0u, 0u);
     settings_move(NULL, 1);
     settings_set_value(NULL, SET_ID_THEME, 1u);
     CHECK_EQ(settings_count(NULL), 0);
@@ -161,7 +161,7 @@ TEST(helpers_are_null_safe)
 
 TEST(the_screen_draws_something_inside_the_framebuffer)
 {
-    settings_init(&g_set, 0u, 0u);
+    settings_init(&g_set, 0u, 0u, 0u);
     fb_reset();
     screen_settings_draw(&g_fb, &THEME_DARK, &g_set);
     CHECK(pixels_set() > 100);
@@ -169,7 +169,7 @@ TEST(the_screen_draws_something_inside_the_framebuffer)
 
 TEST(moving_the_selection_changes_the_frame)
 {
-    settings_init(&g_set, 0u, 0u);
+    settings_init(&g_set, 0u, 0u, 0u);
 
     fb_reset();
     screen_settings_draw(&g_fb, &THEME_DARK, &g_set);
@@ -183,7 +183,7 @@ TEST(moving_the_selection_changes_the_frame)
 
 TEST(changing_a_value_changes_the_frame)
 {
-    settings_init(&g_set, 0u, 0u);
+    settings_init(&g_set, 0u, 0u, 0u);
     settings_move(&g_set, 1);          /* Repeat: Off -> Once */
 
     fb_reset();
@@ -202,7 +202,7 @@ TEST(every_theme_renders_the_screen)
 {
     int i;
     for (i = 0; i < THEME_COUNT; i++) {
-        settings_init(&g_set, (uint8_t)i, 0u);
+        settings_init(&g_set, (uint8_t)i, 0u, 0u);
         fb_reset();
         screen_settings_draw(&g_fb, ALL_THEMES[i], &g_set);
         CHECK(pixels_set() > 50);
@@ -211,12 +211,27 @@ TEST(every_theme_renders_the_screen)
 
 TEST(drawing_with_null_arguments_is_safe)
 {
-    settings_init(&g_set, 0u, 0u);
+    settings_init(&g_set, 0u, 0u, 0u);
     fb_reset();
     screen_settings_draw(NULL, &THEME_DARK, &g_set);
     screen_settings_draw(&g_fb, NULL, &g_set);
     screen_settings_draw(&g_fb, &THEME_DARK, NULL);
     CHECK(1);
+}
+
+TEST(the_now_playing_layout_row_cycles_and_clamps)
+{
+    settings_init(&g_set, 0u, 0u, 1u);
+    CHECK_EQ(settings_value(&g_set, SET_ID_NP_LAYOUT), 1u);
+
+    settings_move(&g_set, 2);          /* Now Playing */
+    CHECK_EQ(settings_activate(&g_set), SET_ID_NP_LAYOUT);
+    CHECK_EQ(settings_value(&g_set, SET_ID_NP_LAYOUT), 0u);   /* wrapped */
+    CHECK_EQ(settings_activate(&g_set), SET_ID_NP_LAYOUT);
+    CHECK_EQ(settings_value(&g_set, SET_ID_NP_LAYOUT), 1u);
+
+    settings_init(&g_set, 0u, 0u, 9u);  /* garbage falls back to Standard */
+    CHECK_EQ(settings_value(&g_set, SET_ID_NP_LAYOUT), 0u);
 }
 
 int main(void)
@@ -239,5 +254,6 @@ int main(void)
     RUN(every_theme_renders_the_screen);
     RUN(drawing_with_null_arguments_is_safe);
 
+    RUN(the_now_playing_layout_row_cycles_and_clamps);
     return TEST_SUMMARY();
 }

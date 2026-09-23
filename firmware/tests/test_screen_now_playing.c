@@ -429,6 +429,89 @@ TEST(drawing_with_null_arguments_is_safe)
     CHECK(1);
 }
 
+static uint16_t g_art[NP_ART_LARGE * NP_ART_LARGE];
+
+static void fill_art(uint16_t c)
+{
+    for (int i = 0; i < NP_ART_LARGE * NP_ART_LARGE; i++) g_art[i] = c;
+}
+
+TEST(each_layout_asks_for_its_own_art_size)
+{
+    CHECK_EQ(np_art_size(NP_LAYOUT_STANDARD), NP_ART_STANDARD);
+    CHECK_EQ(np_art_size(NP_LAYOUT_ART_ONLY), NP_ART_LARGE);
+    CHECK_EQ(np_art_size(200u), NP_ART_STANDARD);
+}
+
+TEST(real_art_lands_centred_in_both_layouts)
+{
+    np_state_t s = base_state();
+    fill_art(0xF81F);
+
+    s.layout = NP_LAYOUT_STANDARD;
+    s.art = g_art;
+    s.art_size = NP_ART_STANDARD;
+    fb_reset();
+    screen_now_playing_draw(&g_fb, &THEME_DARK, &s);
+    CHECK_EQ(gfx_get(&g_fb, SCREEN_W / 2, 8 + NP_ART_STANDARD / 2), 0xF81F);
+
+    s.layout = NP_LAYOUT_ART_ONLY;
+    s.art_size = NP_ART_LARGE;
+    s.overlay = false;
+    fb_reset();
+    g_oob = 0;
+    screen_now_playing_draw(&g_fb, &THEME_DARK, &s);
+    CHECK_EQ(g_oob, 0);
+    CHECK_EQ(gfx_get(&g_fb, SCREEN_W / 2, 12 + NP_ART_LARGE / 2), 0xF81F);
+    /* art-only, controls down: the art reaches all the way to its bottom */
+    CHECK_EQ(gfx_get(&g_fb, SCREEN_W / 2, 12 + NP_ART_LARGE - 1), 0xF81F);
+}
+
+TEST(art_of_the_wrong_size_falls_back_to_the_placeholder)
+{
+    np_state_t s = base_state();
+    fill_art(0xF81F);
+
+    s.layout = NP_LAYOUT_ART_ONLY;
+    s.art = g_art;
+    s.art_size = NP_ART_STANDARD;    /* stale, from the other layout */
+    fb_reset();
+    screen_now_playing_draw(&g_fb, &THEME_DARK, &s);
+    CHECK(gfx_get(&g_fb, SCREEN_W / 2 - 40, 12 + NP_ART_LARGE / 2) != 0xF81F);
+}
+
+TEST(art_only_shows_controls_only_when_woken)
+{
+    np_state_t s = base_state();
+    fill_art(0xFFFF);
+    s.layout = NP_LAYOUT_ART_ONLY;
+    s.art = g_art;
+    s.art_size = NP_ART_LARGE;
+
+    s.overlay = false;
+    fb_reset();
+    screen_now_playing_draw(&g_fb, &THEME_DARK, &s);
+    snapshot();
+    /* nothing but art and background below the art's bottom edge */
+    CHECK_EQ(gfx_get(&g_fb, 20, 216), THEME_DARK.bg);
+
+    s.overlay = true;
+    fb_reset();
+    g_oob = 0;
+    screen_now_playing_draw(&g_fb, &THEME_DARK, &s);
+    CHECK_EQ(g_oob, 0);
+    CHECK(frame_differs());
+    /* the veil has pulled the white art down toward the dark background */
+    CHECK(gfx_get(&g_fb, SCREEN_W / 2 - 60, 225) != 0xFFFF);
+
+    /* volume mode forces the controls up even with the overlay asleep */
+    s.overlay = false;
+    s.vol_active = true;
+    fb_reset();
+    screen_now_playing_draw(&g_fb, &THEME_DARK, &s);
+    CHECK(gfx_get(&g_fb, SCREEN_W / 2 - 60, 225) != 0xFFFF);
+}
+
 int main(void)
 {
     printf("screen_now_playing\n");
@@ -463,5 +546,9 @@ int main(void)
     RUN(the_info_page_survives_an_absurd_path);
     RUN(drawing_with_null_arguments_is_safe);
 
+    RUN(each_layout_asks_for_its_own_art_size);
+    RUN(real_art_lands_centred_in_both_layouts);
+    RUN(art_of_the_wrong_size_falls_back_to_the_placeholder);
+    RUN(art_only_shows_controls_only_when_woken);
     return TEST_SUMMARY();
 }

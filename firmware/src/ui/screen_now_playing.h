@@ -35,6 +35,23 @@ typedef enum {
 
 #define NP_BIT(c)       (1u << (c))
 
+/* Two ways to show a track, chosen in Settings.
+ *   STANDARD  176 px art with the scrubber and controls always underneath.
+ *   ART_ONLY  216 px art alone on the screen; the scrubber and controls
+ *             slide in over the bottom when the encoder is touched and go
+ *             away again on their own. */
+typedef enum {
+    NP_LAYOUT_STANDARD = 0,
+    NP_LAYOUT_ART_ONLY,
+    NP_LAYOUT_COUNT
+} np_layout_t;
+
+#define NP_ART_STANDARD 176
+#define NP_ART_LARGE    216
+
+/* Side of the art square for a layout — what the decoder should aim for. */
+int np_art_size(uint8_t layout);
+
 /* What exists today. PREV/NEXT arrive by adding their bits. */
 #define NP_CTL_DEFAULT  (NP_BIT(NP_CTL_PLAY) | NP_BIT(NP_CTL_VOL) | \
                          NP_BIT(NP_CTL_INFO))
@@ -67,6 +84,16 @@ typedef struct {
     uint8_t  volume_pct;       /* 0-100 */
     bool     vol_active;       /* true = turn adjusts volume; draws the
                                 * overlay so the mode is never invisible */
+
+    /* Layout */
+    uint8_t  layout;           /* np_layout_t */
+    bool     overlay;          /* ART_ONLY: controls are currently showing */
+
+    /* Album art: art_size x art_size RGB565, row-major. NULL, or a size
+     * that does not match the layout, draws the record placeholder — a
+     * stale image from the other layout never gets stretched. */
+    const uint16_t *art;
+    uint16_t art_size;
 } np_state_t;
 
 /* --- focus, as logic rather than drawing, so it can be tested --- */

@@ -305,6 +305,32 @@ TEST(every_theme_index_survives_a_round_trip)
     }
 }
 
+TEST(the_now_playing_layout_round_trips_and_defaults_to_standard)
+{
+    dap_config_t out, in;
+    uint8_t buf[CFG_SIZE];
+
+    config_defaults(&in);
+    CHECK_EQ(in.np_layout, 0u);
+
+    in.np_layout = 1u;
+    config_encode(buf, &in);
+    CHECK(config_decode(buf, &out));
+    CHECK_EQ(out.np_layout, 1u);
+
+    /* A file written before this setting existed had zero in that byte:
+     * it must read back as the standard layout, still valid. */
+    in.np_layout = 0u;
+    config_encode(buf, &in);
+    CHECK_EQ(buf[15], 0u);
+    CHECK(config_decode(buf, &out));
+    CHECK_EQ(out.np_layout, 0u);
+
+    out.np_layout = 7u;
+    config_clamp(&out);
+    CHECK_EQ(out.np_layout, 0u);
+}
+
 int main(void)
 {
     printf("config\n");
@@ -324,5 +350,6 @@ int main(void)
     RUN(null_arguments_are_safe);
     RUN(every_theme_index_survives_a_round_trip);
 
+    RUN(the_now_playing_layout_round_trips_and_defaults_to_standard);
     return TEST_SUMMARY();
 }

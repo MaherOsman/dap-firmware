@@ -10,9 +10,11 @@
 
 static const char *const THEME_VALUES[] = { "Dark", "Warm", "iPod", "Midnight" };
 static const char *const REPEAT_VALUES[] = { "Off", "Once", "All" };
+static const char *const LAYOUT_VALUES[] = { "Standard", "Art only" };
 
 #define N_THEME_VALUES  ((uint8_t)(sizeof(THEME_VALUES) / sizeof(THEME_VALUES[0])))
 #define N_REPEAT_VALUES ((uint8_t)(sizeof(REPEAT_VALUES) / sizeof(REPEAT_VALUES[0])))
+#define N_LAYOUT_VALUES ((uint8_t)(sizeof(LAYOUT_VALUES) / sizeof(LAYOUT_VALUES[0])))
 
 /* The names above must cover every theme the build actually has, or a theme
  * would be selectable with no label. */
@@ -21,7 +23,8 @@ static const char *const REPEAT_VALUES[] = { "Off", "Once", "All" };
  * rather than here. */
 #endif
 
-void settings_init(settings_t *s, uint8_t theme, uint8_t repeat)
+void settings_init(settings_t *s, uint8_t theme, uint8_t repeat,
+                   uint8_t np_layout)
 {
     if (s == NULL) return;
     memset(s, 0, sizeof(*s));
@@ -38,13 +41,19 @@ void settings_init(settings_t *s, uint8_t theme, uint8_t repeat)
     s->items[1].value_count = N_REPEAT_VALUES;
     s->items[1].value = (repeat < N_REPEAT_VALUES) ? repeat : 0u;
 
-    s->items[2].id = SET_ID_RESCAN;
-    s->items[2].label = "Rescan card";
-    s->items[2].values = NULL;      /* action row */
-    s->items[2].value_count = 0u;
-    s->items[2].value = 0u;
+    s->items[2].id = SET_ID_NP_LAYOUT;
+    s->items[2].label = "Now Playing";
+    s->items[2].values = LAYOUT_VALUES;
+    s->items[2].value_count = N_LAYOUT_VALUES;
+    s->items[2].value = (np_layout < N_LAYOUT_VALUES) ? np_layout : 0u;
 
-    s->count = 3u;
+    s->items[3].id = SET_ID_RESCAN;
+    s->items[3].label = "Rescan card";
+    s->items[3].values = NULL;      /* action row */
+    s->items[3].value_count = 0u;
+    s->items[3].value = 0u;
+
+    s->count = 4u;
     s->sel = 0;
     s->top = 0;
 }

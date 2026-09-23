@@ -196,6 +196,42 @@ static void render_now_playing_paused(const theme_t *t, const char *out)
     write_ppm(out);
 }
 
+/* A stand-in cover until real decoding lands: a warm diagonal gradient with
+ * a pale disc, busy enough to show how the veil and controls sit on art. */
+static uint16_t fake_art[NP_ART_LARGE * NP_ART_LARGE];
+
+static const uint16_t *make_fake_art(int size)
+{
+    for (int y = 0; y < size; y++) {
+        for (int x = 0; x < size; x++) {
+            int d = (x + y) * 255 / (2 * size);
+            int dx = x - size * 2 / 3, dy = y - size / 3;
+            uint8_t r = (uint8_t)(220 - d / 2);
+            uint8_t gg = (uint8_t)(90 + d / 3);
+            uint8_t b = (uint8_t)(60 + d / 2);
+            if (dx * dx + dy * dy < (size / 5) * (size / 5)) {
+                r = 250; gg = 235; b = 200;
+            }
+            fake_art[y * size + x] = gfx_rgb(r, gg, b);
+        }
+    }
+    return fake_art;
+}
+
+static void render_layout(const theme_t *t, uint8_t layout, bool overlay,
+                          bool with_art, const char *out)
+{
+    np_state_t s = specimen_track();
+    s.layout = layout;
+    s.overlay = overlay;
+    if (with_art) {
+        s.art_size = (uint16_t)np_art_size(layout);
+        s.art = make_fake_art(s.art_size);
+    }
+    screen_now_playing_draw(&g, t, &s);
+    write_ppm(out);
+}
+
 static void render_info(const theme_t *t, const char *out)
 {
     np_state_t s = specimen_track();
@@ -208,6 +244,17 @@ int main(void)
     gfx_init(&g, fb, SCREEN_W, SCREEN_H);
 
     printf("Rendering 320x240 previews...\n");
+
+    render_layout(&THEME_DARK, NP_LAYOUT_STANDARD, false, true,
+                  "build/preview/np_standard_art.ppm");
+    render_layout(&THEME_DARK, NP_LAYOUT_ART_ONLY, false, true,
+                  "build/preview/np_artonly_art.ppm");
+    render_layout(&THEME_DARK, NP_LAYOUT_ART_ONLY, true, true,
+                  "build/preview/np_artonly_controls.ppm");
+    render_layout(&THEME_IPOD, NP_LAYOUT_ART_ONLY, true, true,
+                  "build/preview/np_artonly_controls_ipod.ppm");
+    render_layout(&THEME_DARK, NP_LAYOUT_ART_ONLY, false, false,
+                  "build/preview/np_artonly_placeholder.ppm");
 
     render_artist_level(&THEME_DARK, "build/preview/library_dark.ppm");
     render_artist_level(&THEME_IPOD, "build/preview/library_ipod.ppm");

@@ -15,7 +15,9 @@
  *   12   1  theme index
  *   13   1  repeat mode
  *   14   1  volume 0..100
- *   15   1  reserved
+ *   15   1  now-playing layout (0 standard, 1 art only) — this byte was
+ *           reserved and always written as 0, so older files read back as
+ *           the standard layout with no version bump
  *   16  28  reserved (zero) — room to add settings without a version bump
  *   44   4  checksum of bytes 0..43
  */
@@ -37,6 +39,7 @@ typedef struct {
     uint8_t theme;    /* index into ALL_THEMES */
     uint8_t repeat;   /* pq_repeat_t */
     uint8_t volume;   /* 0..100 */
+    uint8_t np_layout;/* np_layout_t: 0 standard, 1 art only */
 } dap_config_t;
 
 /* What you get with no file, a corrupt file, or a file from the future. */

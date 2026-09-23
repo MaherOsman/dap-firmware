@@ -23,6 +23,10 @@
  * the seconds display needs, which is enough to never look stuck. */
 #define TICK_REDRAW_MS  500u
 
+/* Art-only layout: how long the scrubber and controls stay up after the
+ * last touch of the encoder. */
+#define NP_OVERLAY_MS   3000u
+
 /* Rows per SPI burst when pushing the framebuffer.
  *
  * The display and the SD card share SPI1, so every pixel pushed is time the
@@ -50,6 +54,7 @@ static dap_config_t g_cfg;
 static settings_t   g_settings;
 static bool      g_dirty = true;
 static uint32_t  g_last_paint;
+static uint32_t  g_overlay_at;   /* when the art-only controls last woke */
 
 /* Strings for the now-playing screen. np_state_t holds pointers, and the
  * track record they would point into lives in the index page cache — which
@@ -177,7 +182,7 @@ void dap_ui_init(gfx_t *fb, st7789_t *tft, libidx_t *idx)
         printf("config: using defaults\r\n");
     }
     apply_theme(g_cfg.theme);
-    settings_init(&g_settings, g_cfg.theme, g_cfg.repeat);
+    settings_init(&g_settings, g_cfg.theme, g_cfg.repeat, g_cfg.np_layout);
 
     browse_init(&g_browse, idx);
     browse_set_pinned(&g_browse, "Settings");
@@ -191,6 +196,7 @@ void dap_ui_init(gfx_t *fb, st7789_t *tft, libidx_t *idx)
     memset(&g_np, 0, sizeof(g_np));
     g_np.enabled = NP_CTL_DEFAULT;
     g_np.focus = NP_CTL_PLAY;
+    g_np.layout = g_cfg.np_layout;
 
     g_screen = UI_LIBRARY;
     g_dirty = true;
@@ -281,8 +287,28 @@ static void activate_control(void)
     }
 }
 
+/* Brings the art-only controls up and restarts their timer. Harmless in the
+ * standard layout, where they never go away. */
+static void np_wake(void)
+{
+    g_np.overlay = true;
+    g_overlay_at = HAL_GetTick();
+}
+
 static void input_now_playing(int delta, int btn)
 {
+    /* In art-only, the first touch just brings the controls up. Acting on
+     * it too would mean a nudge to see the time pauses the music. Hold is
+     * the exception: it always leaves, controls showing or not. */
+    if (g_np.layout == (uint8_t)NP_LAYOUT_ART_ONLY && btn != 2) {
+        bool was_hidden = !g_np.overlay;
+        np_wake();
+        if (was_hidden) {
+            g_dirty = true;
+            return;
+        }
+    }
+
     if (delta != 0) {
         if (g_np.vol_active) {
             g_np.volume_pct = plat_audio_set_volume(delta * 5);
@@ -343,6 +369,12 @@ static void input_settings(int delta, int btn)
             save_config();
             break;
 
+        case SET_ID_NP_LAYOUT:
+            g_cfg.np_layout = settings_value(&g_settings, SET_ID_NP_LAYOUT);
+            g_np.layout = g_cfg.np_layout;
+            save_config();
+            break;
+
         case SET_ID_RESCAN:
             do_rescan();
             g_screen = UI_LIBRARY;
@@ -369,6 +401,8 @@ static void input_info(int delta, int btn)
 
 void dap_ui_input(int delta, int btn)
 {
+    ui_screen_t before = g_screen;
+
     if (delta == 0 && btn == 0) return;
 
     switch (g_screen) {
@@ -377,6 +411,12 @@ void dap_ui_input(int delta, int btn)
     case UI_SETTINGS:    input_settings(delta, btn);    break;
     case UI_LIBRARY:
     default:             input_library(delta, btn);     break;
+    }
+
+    /* Arriving at now-playing from anywhere shows the controls for a
+     * moment, so you can see where the track is before they fade. */
+    if (g_screen == UI_NOW_PLAYING && before != UI_NOW_PLAYING) {
+        np_wake();
     }
 }
 
@@ -462,11 +502,24 @@ void dap_ui_tick(void)
         g_dirty = true;
     }
 
+    /* Art-only: the controls fade once the encoder has been left alone.
+     * Volume mode holds them up — it is still waiting for input. */
+    if (g_screen == UI_NOW_PLAYING &&
+        g_np.layout == (uint8_t)NP_LAYOUT_ART_ONLY &&
+        g_np.overlay && !g_np.vol_active &&
+        (now - g_overlay_at) >= NP_OVERLAY_MS) {
+        g_np.overlay = false;
+        g_dirty = true;
+    }
+
     /* The scrubber has to move on its own, but only while something is
-     * actually playing — repainting an idle screen twice a second would
-     * burn SPI bandwidth for nothing. */
+     * actually playing and only while it is on screen — repainting a frame
+     * that cannot have changed would burn SPI bandwidth for nothing. In
+     * art-only with the controls down, the picture is static until the
+     * next touch or track change. */
     if (!g_dirty && g_screen == UI_NOW_PLAYING &&
         pq_state(&g_pq) == PQ_PLAYING &&
+        !(g_np.layout == (uint8_t)NP_LAYOUT_ART_ONLY && !g_np.overlay) &&
         (now - g_last_paint) >= TICK_REDRAW_MS) {
         g_dirty = true;
     }

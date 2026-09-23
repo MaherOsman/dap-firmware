@@ -58,6 +58,17 @@ int  gfx_text_centered(gfx_t *g, const font_t *f, const char *s, int x, int y,
 int  gfx_text_right(gfx_t *g, const font_t *f, const char *s, int right_x,
                     int y, uint16_t color);
 
+/* Copy a w*h block of RGB565 pixels (row-major, stride w) to (x, y).
+ * Clipped like everything else. This is how album art lands on screen. */
+void gfx_blit(gfx_t *g, int x, int y, int w, int h, const uint16_t *src);
+
+/* Pull what is already in a rectangle toward `color` by `amount`/256
+ * (0 = untouched, 256 = solid colour). This is how controls stay legible
+ * over a bright album cover — veiling toward the theme background works on
+ * light themes as well as dark ones, which a plain darken would not. */
+void gfx_veil_rect(gfx_t *g, int x, int y, int w, int h, uint16_t color,
+                   int amount);
+
 /* Read a pixel — for tests and for the PNG writer. */
 uint16_t gfx_get(const gfx_t *g, int x, int y);
 

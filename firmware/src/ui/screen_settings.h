@@ -24,6 +24,7 @@
 typedef enum {
     SET_ID_THEME = 0,
     SET_ID_REPEAT,
+    SET_ID_NP_LAYOUT,
     SET_ID_RESCAN,
     SET_ID_COUNT
 } set_id_t;
@@ -47,9 +48,10 @@ typedef struct {
     int        top;
 } settings_t;
 
-/* Builds the table. `theme`, `repeat` are current values; they are clamped
- * to the available choices. */
-void settings_init(settings_t *s, uint8_t theme, uint8_t repeat);
+/* Builds the table. `theme`, `repeat`, `np_layout` are current values; they
+ * are clamped to the available choices. */
+void settings_init(settings_t *s, uint8_t theme, uint8_t repeat,
+                   uint8_t np_layout);
 
 int  settings_count(const settings_t *s);
 int  settings_selected(const settings_t *s);

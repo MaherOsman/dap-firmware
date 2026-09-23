@@ -257,6 +257,52 @@ TEST(every_theme_is_distinct_and_readable)
     CHECK(THEME_DARK.bg != THEME_IPOD.bg);
 }
 
+TEST(blit_copies_and_clips)
+{
+    static uint16_t img[4 * 3];
+    for (int i = 0; i < 12; i++) img[i] = (uint16_t)(i + 1);
+
+    setup();
+    gfx_blit(&g, 10, 20, 4, 3, img);
+    CHECK_EQ(gfx_get(&g, 10, 20), 1u);
+    CHECK_EQ(gfx_get(&g, 13, 20), 4u);
+    CHECK_EQ(gfx_get(&g, 10, 21), 5u);   /* stride is the image width */
+    CHECK_EQ(gfx_get(&g, 13, 22), 12u);
+    CHECK_EQ(gfx_get(&g, 14, 20), 0u);
+
+    /* Hanging off the corner: the visible part lands, nothing else. */
+    setup();
+    gfx_blit(&g, SCREEN_W - 2, SCREEN_H - 1, 4, 3, img);
+    CHECK_EQ(gfx_get(&g, SCREEN_W - 2, SCREEN_H - 1), 1u);
+    CHECK_EQ(gfx_get(&g, SCREEN_W - 1, SCREEN_H - 1), 2u);
+
+    setup();
+    gfx_blit(&g, -2, -1, 4, 3, img);
+    CHECK_EQ(gfx_get(&g, 0, 0), 7u);     /* row 1, column 2 */
+    gfx_blit(&g, 0, 0, 4, 3, NULL);      /* a NULL image is ignored */
+}
+
+TEST(veil_moves_pixels_toward_the_colour)
+{
+    setup();
+    gfx_fill_rect(&g, 0, 0, 10, 10, 0xFFFF);
+    gfx_veil_rect(&g, 0, 0, 5, 10, 0x0000, 128);
+    /* white halfway to black: every channel at half, none spilling over */
+    CHECK_EQ(gfx_get(&g, 0, 0), 0x7BEF);
+    CHECK_EQ(gfx_get(&g, 5, 0), 0xFFFF);  /* outside the rect: untouched */
+
+    gfx_veil_rect(&g, 5, 0, 5, 10, 0x0000, 256);
+    CHECK_EQ(gfx_get(&g, 5, 0), 0x0000);  /* full strength is the colour */
+
+    gfx_veil_rect(&g, 5, 1, 5, 1, 0xFFFF, 0);
+    CHECK_EQ(gfx_get(&g, 5, 1), 0x0000);  /* zero does nothing */
+
+    /* Veiling a colour toward itself changes nothing. */
+    gfx_fill_rect(&g, 0, 0, 10, 10, 0x1234);
+    gfx_veil_rect(&g, 0, 0, 10, 10, 0x1234, 200);
+    CHECK_EQ(gfx_get(&g, 3, 3), 0x1234);
+}
+
 int main(void)
 {
     printf("gfx + library screen\n");
@@ -277,5 +323,7 @@ int main(void)
     RUN(selected_row_is_highlighted);
     RUN(scrollbar_appears_only_when_needed);
     RUN(every_theme_is_distinct_and_readable);
+    RUN(blit_copies_and_clips);
+    RUN(veil_moves_pixels_toward_the_colour);
     return TEST_SUMMARY();
 }

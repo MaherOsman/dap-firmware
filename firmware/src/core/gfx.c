@@ -175,3 +175,57 @@ int gfx_text_right(gfx_t *g, const font_t *f, const char *s, int right_x,
     plot_ctx_t ctx = {g, color};
     return font_draw_text_right(f, s, right_x, y, plot_cb, &ctx);
 }
+
+void gfx_blit(gfx_t *g, int x, int y, int w, int h, const uint16_t *src)
+{
+    int x0, y0, x1, y1;
+
+    if (src == NULL || w <= 0 || h <= 0) return;
+
+    x0 = x < g->cx0 ? g->cx0 : x;
+    y0 = y < g->cy0 ? g->cy0 : y;
+    x1 = x + w > g->cx1 ? g->cx1 : x + w;
+    y1 = y + h > g->cy1 ? g->cy1 : y + h;
+
+    for (int yy = y0; yy < y1; yy++) {
+        uint16_t *row = g->px + (size_t)yy * g->w;
+        const uint16_t *in = src + (size_t)(yy - y) * (size_t)w;
+        for (int xx = x0; xx < x1; xx++) {
+            row[xx] = in[xx - x];
+        }
+    }
+}
+
+static uint16_t blend565(uint16_t p, uint16_t c, uint32_t a)
+{
+    /* Channel by channel: p + (c - p) * a / 256, in unsigned arithmetic by
+     * blending each way separately. Integer only; no FPU needed. */
+    uint32_t pr = (p >> 11) & 0x1Fu, pg = (p >> 5) & 0x3Fu, pb = p & 0x1Fu;
+    uint32_t cr = (c >> 11) & 0x1Fu, cg = (c >> 5) & 0x3Fu, cb = c & 0x1Fu;
+    uint32_t na = 256u - a;
+    uint32_t r  = (pr * na + cr * a) >> 8;
+    uint32_t gg = (pg * na + cg * a) >> 8;
+    uint32_t b  = (pb * na + cb * a) >> 8;
+    return (uint16_t)((r << 11) | (gg << 5) | b);
+}
+
+void gfx_veil_rect(gfx_t *g, int x, int y, int w, int h, uint16_t color,
+                   int amount)
+{
+    int x0, y0, x1, y1;
+
+    if (amount <= 0) return;
+    if (amount > 256) amount = 256;
+
+    x0 = x < g->cx0 ? g->cx0 : x;
+    y0 = y < g->cy0 ? g->cy0 : y;
+    x1 = x + w > g->cx1 ? g->cx1 : x + w;
+    y1 = y + h > g->cy1 ? g->cy1 : y + h;
+
+    for (int yy = y0; yy < y1; yy++) {
+        uint16_t *row = g->px + (size_t)yy * g->w;
+        for (int xx = x0; xx < x1; xx++) {
+            row[xx] = blend565(row[xx], color, (uint32_t)amount);
+        }
+    }
+}
