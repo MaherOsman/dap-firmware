@@ -76,7 +76,8 @@ static void copy_path(char *dst, const char *src)
 static int fmt_rank(art_fmt_t f)
 {
     switch (f) {
-    case ART_FMT_JPEG:    return 3;
+    case ART_FMT_JPEG:    return 4;
+    case ART_FMT_JPEG_PROGRESSIVE: return 3;
     case ART_FMT_NONE:    return 0;
     case ART_FMT_UNKNOWN: return 1;
     default:              return 2;
@@ -390,53 +391,52 @@ static bool is_disc_dir(const char *path, size_t len)
     return c0 == 'd' && c1 == 'i' && (c2 == 's') && (c3 == 'c' || c3 == 'k');
 }
 
-/* Tries every folder image name in the directory path[0..len). Stops at
- * the first decodable one; remembers the best undecodable one in `alt`. */
-static bool scan_folder(const lib_io_t *io, const char *path, size_t len,
-                        art_ref_t *out, art_ref_t *alt, int *skip)
+/* One place art was found, kept compact so the whole list fits on the
+ * stack: which directory, which name and extension, what it turned out to
+ * be. Embedded art is dir 2. */
+typedef struct {
+    uint8_t dir, name, ext;
+    art_fmt_t fmt;
+} cand_t;
+
+#define MAX_CANDS (2u * N_NAMES * N_EXTS + 1u)
+
+static bool is_decodable(art_fmt_t f)
+{
+    return f == ART_FMT_JPEG || f == ART_FMT_JPEG_PROGRESSIVE;
+}
+
+/* Builds "<dir><name><ext>" for a folder candidate. */
+static void cand_path(char *buf, const char *track, size_t dlen,
+                      const cand_t *c)
+{
+    size_t a = strlen(FOLDER_NAMES[c->name]), b = strlen(FOLDER_EXTS[c->ext]);
+    memcpy(buf, track, dlen);
+    memcpy(buf + dlen, FOLDER_NAMES[c->name], a);
+    memcpy(buf + dlen + a, FOLDER_EXTS[c->ext], b);
+    buf[dlen + a + b] = '\0';
+}
+
+/* Probes every folder image name in the directory track[0..dlen) once,
+ * appending what exists to `cands`. */
+static void gather_folder(const lib_io_t *io, const char *track, size_t dlen,
+                          uint8_t dir, cand_t *cands, size_t *n)
 {
     char buf[ART_PATH_MAX + 1];
-    size_t i, j;
+    cand_t c;
 
-    if (len + 16u > ART_PATH_MAX) return false;
-    memcpy(buf, path, len);
-
-    for (i = 0; i < N_NAMES; i++) {
-        for (j = 0; j < N_EXTS; j++) {
-            size_t a = strlen(FOLDER_NAMES[i]), b = strlen(FOLDER_EXTS[j]);
+    if (dlen + 16u > ART_PATH_MAX) return;
+    c.dir = dir;
+    for (c.name = 0; c.name < N_NAMES; c.name++) {
+        for (c.ext = 0; c.ext < N_EXTS; c.ext++) {
             void *fh = NULL;
-            art_fmt_t fmt;
-
-            memcpy(buf + len, FOLDER_NAMES[i], a);
-            memcpy(buf + len + a, FOLDER_EXTS[j], b);
-            buf[len + a + b] = '\0';
-
+            cand_path(buf, track, dlen, &c);
             if (io->open(io->ctx, buf, LIB_IO_READ, &fh) != 0) continue;
-            fmt = art_probe(io, fh, 0, 0);
+            c.fmt = art_probe(io, fh, 0, 0);
             io->close(io->ctx, fh);
-
-            if (fmt == ART_FMT_JPEG && *skip > 0) {
-                (*skip)--;                 /* already tried by the caller */
-                continue;
-            }
-            if (fmt == ART_FMT_JPEG) {
-                out->fmt = fmt;
-                out->from = ART_FROM_FOLDER;
-                copy_path(out->path, buf);
-                out->offset = 0;
-                out->length = 0;
-                return true;
-            }
-            if (fmt_rank(fmt) > fmt_rank(alt->fmt)) {
-                alt->fmt = fmt;
-                alt->from = ART_FROM_FOLDER;
-                copy_path(alt->path, buf);
-                alt->offset = 0;
-                alt->length = 0;
-            }
+            if (*n < MAX_CANDS) cands[(*n)++] = c;
         }
     }
-    return false;
 }
 
 bool art_find(const lib_io_t *io, const char *track_path, art_ref_t *out)
@@ -447,9 +447,13 @@ bool art_find(const lib_io_t *io, const char *track_path, art_ref_t *out)
 bool art_find_nth(const lib_io_t *io, const char *track_path, int nth,
                   art_ref_t *out)
 {
-    art_ref_t alt, emb;
-    size_t d;
-    int skip = nth;
+    static const art_fmt_t PASSES[2] = { ART_FMT_JPEG,
+                                         ART_FMT_JPEG_PROGRESSIVE };
+    cand_t cands[MAX_CANDS];
+    size_t n = 0, i, dlen[2];
+    art_ref_t emb;
+    bool have_emb;
+    int skip = nth, pass, best = -1;
 
     if (out != NULL) memset(out, 0, sizeof(*out));
     if (io == NULL || track_path == NULL || out == NULL ||
@@ -457,27 +461,65 @@ bool art_find_nth(const lib_io_t *io, const char *track_path, int nth,
         io->close == NULL) {
         return false;
     }
-    memset(&alt, 0, sizeof(alt));
 
-    d = dir_len(track_path, strlen(track_path));
-    if (scan_folder(io, track_path, d, out, &alt, &skip)) return true;
-    if (is_disc_dir(track_path, d)) {
-        size_t up = dir_len(track_path, d - 1u);
-        if (scan_folder(io, track_path, up, out, &alt, &skip)) return true;
+    /* Look everywhere once. */
+    dlen[0] = dir_len(track_path, strlen(track_path));
+    dlen[1] = 0;
+    gather_folder(io, track_path, dlen[0], 0, cands, &n);
+    if (is_disc_dir(track_path, dlen[0])) {
+        dlen[1] = dir_len(track_path, dlen[0] - 1u);
+        gather_folder(io, track_path, dlen[1], 1, cands, &n);
+    }
+    have_emb = art_find_embedded(io, track_path, &emb);
+    if (have_emb && n < MAX_CANDS) {
+        cands[n].dir = 2;
+        cands[n].name = cands[n].ext = 0;
+        cands[n].fmt = emb.fmt;
+        n++;
     }
 
-    if (art_find_embedded(io, track_path, &emb)) {
-        if (emb.fmt == ART_FMT_JPEG && skip > 0) {
-            skip--;
-        } else if (emb.fmt == ART_FMT_JPEG) {
-            *out = emb;
-            return true;
+    /* Baseline JPEGs first, wherever they are — they are the sharpest the
+     * decoder can do. Then progressive ones. Within each, the order found:
+     * cover before folder before front..., the track's folder before the
+     * album folder, folder images before embedded art. */
+    for (pass = 0; pass < 2; pass++) {
+        for (i = 0; i < n; i++) {
+            if (cands[i].fmt != PASSES[pass]) continue;
+            if (skip > 0) { skip--; continue; }
+            best = (int)i;
+            break;
         }
-        if (fmt_rank(emb.fmt) > fmt_rank(alt.fmt)) alt = emb;
+        if (best >= 0) break;
     }
 
-    *out = alt;
-    return false;
+    /* Nothing usable: report the most telling thing that was there, so
+     * the log can say why this album shows the placeholder. */
+    if (best < 0) {
+        for (i = 0; i < n; i++) {
+            if (!is_decodable(cands[i].fmt) &&
+                (best < 0 || fmt_rank(cands[i].fmt) >
+                             fmt_rank(cands[best].fmt))) {
+                best = (int)i;
+            }
+        }
+        if (best < 0) return false;
+    }
+
+    {
+        const cand_t *c = &cands[best];
+        if (c->dir == 2) {
+            *out = emb;
+        } else {
+            char buf[ART_PATH_MAX + 1];
+            cand_path(buf, track_path, dlen[c->dir], c);
+            out->fmt = c->fmt;
+            out->from = ART_FROM_FOLDER;
+            copy_path(out->path, buf);
+            out->offset = 0;
+            out->length = 0;
+        }
+    }
+    return is_decodable(out->fmt);
 }
 
 /* ------------------------------------------------------------ reading */

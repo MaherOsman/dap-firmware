@@ -112,7 +112,9 @@ const uint16_t *plat_art_for(uint32_t album, const char *track_path, int size)
             printf("art: could not open %s\r\n", ref.path);
             continue;
         }
-        r = art_decode_jpeg(&src, g_img, size, &g_work, &info);
+        r = (ref.fmt == ART_FMT_JPEG_PROGRESSIVE)
+                ? art_decode_jpeg_progressive(&src, g_img, size, &g_work, &info)
+                : art_decode_jpeg(&src, g_img, size, &g_work, &info);
         art_close(&rd);
 
         if (r == ART_OK) break;
@@ -121,8 +123,8 @@ const uint16_t *plat_art_for(uint32_t album, const char *track_path, int size)
     }
     if (n == 4) return NULL;
 
-    printf("art: %s, %ux%u -> %d px (1/%u) in %lu ms: %s\r\n",
-           art_from_name(ref.from), (unsigned)info.src_w,
+    printf("art: %s %s, %ux%u -> %d px (1/%u) in %lu ms: %s\r\n",
+           art_from_name(ref.from), art_fmt_name(ref.fmt), (unsigned)info.src_w,
            (unsigned)info.src_h, size, 1u << info.scale,
            (unsigned long)(HAL_GetTick() - t0), ref.path);
     g_have = true;

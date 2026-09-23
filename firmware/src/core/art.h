@@ -85,6 +85,17 @@ typedef struct {
 art_result_t art_decode_jpeg(const art_src_t *src, uint16_t *out, int size,
                              art_work_t *work, art_info_t *info);
 
+/*
+ * The same, for a progressive JPEG. Decodes the first (DC) pass only — an
+ * 1/8-size image — and reads no further into the file. Covers of 1408 px
+ * and up come out sharp; smaller ones are enlarged smoothly and look a
+ * little soft. Returns ART_ERR_UNSUPPORTED for the rare progressive files
+ * whose first pass is not an interleaved DC scan.
+ */
+art_result_t art_decode_jpeg_progressive(const art_src_t *src, uint16_t *out,
+                                         int size, art_work_t *work,
+                                         art_info_t *info);
+
 /* Short name for a result, for the serial log. */
 const char *art_result_name(art_result_t r);
 

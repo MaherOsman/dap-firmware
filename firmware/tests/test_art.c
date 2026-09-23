@@ -150,9 +150,87 @@ TEST(greyscale_covers_decode)
     CHECK_EQ(untouched(s), 0);
 }
 
-TEST(progressive_jpegs_are_reported_as_unsupported)
+TEST(progressive_jpegs_are_turned_away_by_the_baseline_path)
 {
     CHECK_EQ(DECODE(FIX_PROG, 176, NULL), ART_ERR_UNSUPPORTED);
+}
+
+/* ---------------------------------------------------- progressive */
+
+static art_result_t decode_prog(const uint8_t *data, size_t len, int size,
+                                art_info_t *info, size_t *used)
+{
+    mem_t m = { data, len, 0, 0 };
+    art_src_t src = { mem_read, mem_yield, &m };
+    art_result_t r;
+    int i;
+
+    for (i = 0; i < ART_MAX_SIZE * ART_MAX_SIZE; i++) g_out[i] = SENTINEL;
+    r = art_decode_jpeg_progressive(&src, g_out, size, &g_work, info);
+    if (used != NULL) *used = m.pos;
+    return r;
+}
+
+#define DECODE_PROG(fix, size, info) \
+    decode_prog((fix), sizeof(fix), (size), (info), NULL)
+
+TEST(a_small_progressive_cover_is_enlarged_from_its_first_pass)
+{
+    art_info_t info;
+    /* 200 px -> 25 px first pass -> enlarged. Quadrant centres hold. */
+    CHECK_EQ(DECODE_PROG(FIX_PROG, 176, &info), ART_OK);
+    CHECK_EQ(info.src_w, 200);
+    CHECK_EQ(info.scale, 3);
+    check_quadrants(176);
+    CHECK_EQ(DECODE_PROG(FIX_PROG, 216, NULL), ART_OK);
+    check_quadrants(216);
+}
+
+TEST(a_big_progressive_cover_shrinks_and_needs_only_its_first_pass)
+{
+    /* The fixture stops right after the first scan. Decoding succeeds,
+     * which is the proof that nothing past it is ever read. */
+    size_t used = 0;
+    CHECK_EQ(decode_prog(FIX_PROG1600, sizeof(FIX_PROG1600), 176, NULL, &used),
+             ART_OK);
+    check_quadrants(176);
+    CHECK(used <= sizeof(FIX_PROG1600));
+    CHECK_EQ(DECODE_PROG(FIX_PROG1600, 216, NULL), ART_OK);
+    check_quadrants(216);
+}
+
+TEST(progressive_greyscale_and_444_and_restarts_decode)
+{
+    int s = 176;
+    CHECK_EQ(DECODE_PROG(FIX_PROGGRAY, s, NULL), ART_OK);
+    CHECK(near(s, s / 4, s / 2, 40, 40, 40, 16));
+    CHECK(near(s, 3 * s / 4, s / 2, 200, 200, 200, 16));
+    CHECK_EQ(untouched(s), 0);
+
+    CHECK_EQ(DECODE_PROG(FIX_PROGWIDE, s, NULL), ART_OK);
+    CHECK(near(s, s / 2, s / 2, 30, 200, 60, 24));
+    CHECK(near(s, 3, s / 2, 220, 30, 30, 40));
+    CHECK(near(s, s - 4, s / 2, 40, 60, 210, 40));
+    CHECK_EQ(untouched(s), 0);
+
+    CHECK_EQ(DECODE_PROG(FIX_PROGRST, s, NULL), ART_OK);
+    check_quadrants(s);
+}
+
+TEST(the_progressive_path_turns_away_what_it_cannot_do)
+{
+    static const uint8_t junk[64] = { 0x12, 0x34 };
+    art_result_t r;
+
+    /* a baseline file is the other decoder's job */
+    CHECK_EQ(DECODE_PROG(FIX_QUAD400, 176, NULL), ART_ERR_UNSUPPORTED);
+    CHECK(DECODE_PROG(junk, 176, NULL) != ART_OK);
+
+    /* cut off inside the first scan: an error, not garbage */
+    r = decode_prog(FIX_PROG1600, sizeof(FIX_PROG1600) / 2, 176, NULL, NULL);
+    CHECK(r != ART_OK);
+    r = decode_prog(FIX_PROG1600, 40, 176, NULL, NULL);
+    CHECK(r != ART_OK);
 }
 
 TEST(damaged_input_fails_cleanly)
@@ -226,7 +304,11 @@ int main(void)
     RUN(a_small_cover_is_enlarged_with_every_pixel_written);
     RUN(a_wide_cover_is_cropped_to_its_centre);
     RUN(greyscale_covers_decode);
-    RUN(progressive_jpegs_are_reported_as_unsupported);
+    RUN(progressive_jpegs_are_turned_away_by_the_baseline_path);
+    RUN(a_small_progressive_cover_is_enlarged_from_its_first_pass);
+    RUN(a_big_progressive_cover_shrinks_and_needs_only_its_first_pass);
+    RUN(progressive_greyscale_and_444_and_restarts_decode);
+    RUN(the_progressive_path_turns_away_what_it_cannot_do);
     RUN(damaged_input_fails_cleanly);
     RUN(the_decode_yields_to_the_audio_regularly);
     RUN(a_null_yield_is_fine);

@@ -37,6 +37,29 @@ def gray_halves(n):
     return im
 
 
+def first_scan_only(data):
+    """Cut a progressive JPEG just after its first scan: the start of the
+    second SOS marker. The decoder must never need more than this."""
+    i, seen = 2, 0
+    while i < len(data) - 4:
+        if data[i] != 0xFF:
+            i += 1
+            continue
+        m = data[i + 1]
+        if m == 0x00 or m == 0xFF or 0xD0 <= m <= 0xD7:
+            i += 2 if m != 0xFF else 1
+            continue
+        if m == 0xDA:
+            seen += 1
+            if seen == 2:
+                return data[:i + 2]
+        if seen == 0:
+            i += 2 + ((data[i + 2] << 8) | data[i + 3])
+        else:
+            i += 2
+    return data
+
+
 def jpeg(im, **kw):
     b = io.BytesIO()
     im.save(b, "JPEG", quality=kw.pop("quality", 92), **kw)
@@ -48,7 +71,11 @@ FIXTURES = [
     ("quad64",   "64x64 quadrants, smaller than the art square", jpeg(quadrants(64), subsampling=0)),
     ("wide",     "600x300 thirds R G B, not square: centre-cropped", jpeg(thirds(600, 300))),
     ("gray",     "300x300 greyscale, dark left half, light right half", jpeg(gray_halves(300))),
-    ("prog",     "200x200 progressive — TJpgDec cannot decode these", jpeg(quadrants(200), progressive=True)),
+    ("prog",     "200x200 progressive quadrants, 4:2:0", jpeg(quadrants(200), progressive=True)),
+    ("prog1600", "1600x1600 progressive quadrants, cut after the first scan", first_scan_only(jpeg(quadrants(1600), progressive=True, quality=75))),
+    ("proggray", "300x300 progressive greyscale halves", jpeg(gray_halves(300), progressive=True)),
+    ("progwide", "600x300 progressive thirds, 4:4:4", jpeg(thirds(600, 300), progressive=True, subsampling=0)),
+    ("progrst",  "400x400 progressive with restart markers, cut after the first scan", first_scan_only(jpeg(quadrants(400), progressive=True, restart_marker_blocks=3))),
 ]
 
 with open("tests/art_fixtures.h", "w") as f:

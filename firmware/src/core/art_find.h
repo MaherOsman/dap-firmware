@@ -14,8 +14,9 @@
  *
  * Every candidate is identified by its first bytes, not its file name — a
  * "cover.jpg" that is secretly a PNG gets called a PNG. JPEGs are checked
- * one step further, to baseline vs progressive, because the decoder only
- * does baseline.
+ * one step further, to baseline vs progressive: both decode, but baseline
+ * is sharper for covers under 1408 px, so it is preferred when an album
+ * has both.
  *
  * The answer is a reference: a file, and a byte span inside it. Folder
  * images are the whole file; embedded art is the span of picture data
@@ -66,11 +67,12 @@ typedef struct {
  * Find art for the track at `track_path`.
  *
  * Returns true with `out` set to something the decoder can do. Preference:
- * a folder image first (one per album, usually the largest), then art
- * embedded in the track.
+ * any baseline JPEG before any progressive one; within that, folder images
+ * (one per album, usually the largest) before art embedded in the track.
+ * out->fmt says which decoder to use.
  *
  * Returns false when nothing decodable exists. `out` then describes the
- * best thing that was found anyway (a PNG, a progressive JPEG) so the log
+ * best thing that was found anyway (a PNG, say) so the log
  * can say why this album shows the placeholder — or has fmt ART_FMT_NONE
  * if there was no art at all.
  */

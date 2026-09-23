@@ -379,9 +379,10 @@ TEST(undecodable_art_is_reported_for_the_log)
     CHECK_EQ(r.fmt, ART_FMT_PNG);
     CHECK(strcmp(r.path, "/M/cover.png") == 0);
 
+    /* progressive is decodable now: found, and says which decoder */
     fs_reset();
     add_mp3("/M/01.mp3", 3, 3u, FIX_PROG, sizeof(FIX_PROG), 0);
-    CHECK(!art_find(&io, "/M/01.mp3", &r));
+    CHECK(art_find(&io, "/M/01.mp3", &r));
     CHECK_EQ(r.fmt, ART_FMT_JPEG_PROGRESSIVE);
     CHECK_EQ(r.from, ART_FROM_ID3);
 
@@ -505,6 +506,35 @@ TEST(later_candidates_can_be_asked_for_in_order)
     CHECK_EQ(g_open_count, 0);
 }
 
+TEST(a_baseline_cover_anywhere_beats_a_progressive_one)
+{
+    lib_io_t io = make_io();
+    art_ref_t r;
+
+    /* folder.jpg is progressive (like the real one that started this);
+     * the embedded art is baseline. Baseline wins despite the order... */
+    fs_reset();
+    add_mp3("/M/01.mp3", 3, 3u, FIX_QUAD64, sizeof(FIX_QUAD64), 0);
+    add_image("/M/folder.jpg", FIX_PROG, sizeof(FIX_PROG));
+    CHECK(art_find(&io, "/M/01.mp3", &r));
+    CHECK_EQ(r.from, ART_FROM_ID3);
+    CHECK_EQ(r.fmt, ART_FMT_JPEG);
+
+    /* ...and the progressive one is next in line if that fails. */
+    CHECK(art_find_nth(&io, "/M/01.mp3", 1, &r));
+    CHECK(strcmp(r.path, "/M/folder.jpg") == 0);
+    CHECK_EQ(r.fmt, ART_FMT_JPEG_PROGRESSIVE);
+    CHECK(!art_find_nth(&io, "/M/01.mp3", 2, &r));
+
+    /* a progressive folder.jpg alone is used */
+    fs_reset();
+    add_plain_audio("/M/01.flac");
+    add_image("/M/folder.jpg", FIX_PROG, sizeof(FIX_PROG));
+    CHECK(art_find(&io, "/M/01.flac", &r));
+    CHECK_EQ(r.fmt, ART_FMT_JPEG_PROGRESSIVE);
+    CHECK_EQ(g_open_count, 0);
+}
+
 int main(void)
 {
     printf("art_find\n");
@@ -521,5 +551,6 @@ int main(void)
     RUN(damaged_containers_never_hang_or_crash);
     RUN(bad_arguments_are_safe);
     RUN(later_candidates_can_be_asked_for_in_order);
+    RUN(a_baseline_cover_anywhere_beats_a_progressive_one);
     return TEST_SUMMARY();
 }
