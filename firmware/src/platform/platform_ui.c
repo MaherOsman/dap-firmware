@@ -26,7 +26,7 @@
 /* Rows per SPI burst when pushing the framebuffer.
  *
  * The display and the SD card share SPI1, so every pixel pushed is time the
- * card is not feeding the DAC. A whole 240x240 frame is 115 KB and blocks
+ * card is not feeding the DAC. A whole 320x240 frame is 150 KB and blocks
  * the main loop for roughly 40 ms — well past the ~23 ms the audio ring can
  * survive without a refill, which showed up as dozens of underruns per track
  * and audible static. Pushing in bands and servicing audio between them
@@ -384,16 +384,19 @@ void dap_ui_input(int delta, int btn)
 
 static void push_panel(void)
 {
+    const int w = g_fb->w;
+    const int h = g_fb->h;
     int y;
 
-    for (y = 0; y < 240; y += PANEL_BAND_ROWS) {
+    for (y = 0; y < h; y += PANEL_BAND_ROWS) {
         int rows = PANEL_BAND_ROWS;
-        if (y + rows > 240) rows = 240 - y;
+        if (y + rows > h) rows = h - y;
 
         g_tft->bus->set_cs(g_tft->bus->ctx, true);
-        st7789_set_window(g_tft, 0, y, 239, y + rows - 1);
-        st7789_write_pixels(g_tft, g_fb->px + (size_t)y * 240u,
-                            (uint32_t)rows * 240u);
+        st7789_set_window(g_tft, 0, (uint16_t)y, (uint16_t)(w - 1),
+                          (uint16_t)(y + rows - 1));
+        st7789_write_pixels(g_tft, g_fb->px + (size_t)y * (size_t)w,
+                            (size_t)rows * (size_t)w);
         g_tft->bus->set_cs(g_tft->bus->ctx, false);
 
         /* CS is deasserted before this runs, so the SD card is free to use

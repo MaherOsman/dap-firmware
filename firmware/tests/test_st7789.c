@@ -89,23 +89,31 @@ TEST(init_turns_inversion_on)
     CHECK(find_cmd(ST7789_INVON, 0) >= 0);
 }
 
-TEST(rotation_offsets_are_right)
+TEST(rotation_sets_size_and_no_offsets)
 {
-    setup(0);
-    CHECK_EQ(dev.x_off, 0);
-    CHECK_EQ(dev.y_off, 0);
+    /* The 2.0" panel fills the controller's memory: no offset anywhere. */
+    for (uint8_t r = 0; r < 4; r++) {
+        setup(r);
+        CHECK_EQ(dev.x_off, 0);
+        CHECK_EQ(dev.y_off, 0);
+        if (r & 1) {
+            CHECK_EQ(dev.width, 320);
+            CHECK_EQ(dev.height, 240);
+        } else {
+            CHECK_EQ(dev.width, 240);
+            CHECK_EQ(dev.height, 320);
+        }
+    }
+}
 
-    st7789_set_rotation(&dev, 2);
-    CHECK_EQ(dev.y_off, 80); /* 320 - 240 */
-    CHECK_EQ(dev.x_off, 0);
-
-    st7789_set_rotation(&dev, 3);
-    CHECK_EQ(dev.x_off, 80);
-    CHECK_EQ(dev.y_off, 0);
-
-    st7789_set_rotation(&dev, 1);
-    CHECK_EQ(dev.x_off, 0);
-    CHECK_EQ(dev.y_off, 0);
+TEST(landscape_rotations_set_row_column_exchange)
+{
+    setup(1);
+    long m = find_cmd(ST7789_MADCTL, 0);
+    CHECK(m >= 0 && (mock.bytes[m + 1] & MADCTL_MV));
+    setup(3);
+    m = find_cmd(ST7789_MADCTL, 0);
+    CHECK(m >= 0 && (mock.bytes[m + 1] & MADCTL_MV));
 }
 
 TEST(window_coordinates_are_inclusive_and_offset)
@@ -127,14 +135,17 @@ TEST(window_coordinates_are_inclusive_and_offset)
     CHECK(find_cmd(ST7789_RAMWR, 0) > raset);
 }
 
-TEST(rotation_2_shifts_rows_by_80)
+TEST(landscape_window_spans_320_columns)
 {
-    setup(2);
+    setup(1);
     mock.n = 0;
-    st7789_set_window(&dev, 0, 0, 239, 239);
+    st7789_set_window(&dev, 0, 0, 319, 239);
+    long caset = find_cmd(ST7789_CASET, 0);
+    CHECK_EQ((mock.bytes[caset + 1] << 8) | mock.bytes[caset + 2], 0);
+    CHECK_EQ((mock.bytes[caset + 3] << 8) | mock.bytes[caset + 4], 319);
     long raset = find_cmd(ST7789_RASET, 0);
-    CHECK_EQ(mock.bytes[raset + 2], 80);
-    CHECK_EQ((mock.bytes[raset + 3] << 8) | mock.bytes[raset + 4], 319);
+    CHECK_EQ((mock.bytes[raset + 1] << 8) | mock.bytes[raset + 2], 0);
+    CHECK_EQ((mock.bytes[raset + 3] << 8) | mock.bytes[raset + 4], 239);
 }
 
 TEST(pixels_go_out_msb_first)
@@ -165,9 +176,9 @@ TEST(fill_rect_writes_exactly_w_times_h_pixels)
 
 TEST(fill_rect_clips_to_the_panel)
 {
-    setup(0);
+    setup(1); /* landscape, 320x240 */
     mock.n = 0;
-    st7789_fill_rect(&dev, 230, 230, 100, 100, 0);
+    st7789_fill_rect(&dev, 310, 230, 100, 100, 0);
     long ramwr = find_cmd(ST7789_RAMWR, 0);
     size_t pixel_bytes = mock.n - (size_t)(ramwr + 1);
     CHECK_EQ(pixel_bytes, 10u * 10u * 2u); /* clipped to 10x10, not 100x100 */
@@ -177,16 +188,16 @@ TEST(fill_rect_clips_to_the_panel)
     CHECK_EQ(mock.n, 0);
 }
 
-TEST(full_screen_fill_is_240x240)
+TEST(full_screen_fill_is_320x240)
 {
-    setup(0);
+    setup(1);
     mock.n = 0;
     mock.total = 0;
     st7789_fill_screen(&dev, 0x0000);
     /* 11 bytes of CASET/RASET/RAMWR overhead, then a full frame.
-     * 115200 bytes at 30 MHz SPI is ~31 ms — which is why the real firmware
-     * will want DMA and partial redraws, not a full clear every frame. */
-    CHECK_EQ(mock.total, 11u + 240u * 240u * 2u);
+     * 153600 bytes at 15 MHz SPI is ~82 ms — which is why the firmware
+     * pushes in bands and will want DMA and partial redraws. */
+    CHECK_EQ(mock.total, 11u + 320u * 240u * 2u);
 }
 
 TEST(rgb565_packing)
@@ -203,13 +214,14 @@ int main(void)
     printf("st7789\n");
     RUN(init_emits_the_required_sequence);
     RUN(init_turns_inversion_on);
-    RUN(rotation_offsets_are_right);
+    RUN(rotation_sets_size_and_no_offsets);
+    RUN(landscape_rotations_set_row_column_exchange);
     RUN(window_coordinates_are_inclusive_and_offset);
-    RUN(rotation_2_shifts_rows_by_80);
+    RUN(landscape_window_spans_320_columns);
     RUN(pixels_go_out_msb_first);
     RUN(fill_rect_writes_exactly_w_times_h_pixels);
     RUN(fill_rect_clips_to_the_panel);
-    RUN(full_screen_fill_is_240x240);
+    RUN(full_screen_fill_is_320x240);
     RUN(rgb565_packing);
     return TEST_SUMMARY();
 }

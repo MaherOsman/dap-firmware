@@ -29,29 +29,32 @@ void st7789_set_rotation(st7789_t *d, uint8_t rotation)
     uint8_t madctl;
     d->rotation = (uint8_t)(rotation & 3);
 
-    /* The panel is a 240x240 window into a 240x320 controller. In the two
-     * rotations where the origin lands at the far end of frame memory we
-     * have to shift by 320-240 = 80. */
+    /* MV swaps rows and columns, which is what turns the portrait panel
+     * landscape. MX/MY then pick which corner is the origin. The panel fills
+     * the controller's whole 240x320 memory, so there are no offsets. */
     switch (d->rotation) {
     case 0:
         madctl = MADCTL_RGB;
-        d->x_off = 0; d->y_off = 0;
         break;
     case 1:
         madctl = MADCTL_MX | MADCTL_MV | MADCTL_RGB;
-        d->x_off = 0; d->y_off = 0;
         break;
     case 2:
         madctl = MADCTL_MX | MADCTL_MY | MADCTL_RGB;
-        d->x_off = 0; d->y_off = 80;
         break;
     default: /* 3 */
         madctl = MADCTL_MV | MADCTL_MY | MADCTL_RGB;
-        d->x_off = 80; d->y_off = 0;
         break;
     }
-    d->width  = ST7789_WIDTH;
-    d->height = ST7789_HEIGHT;
+    d->x_off = 0;
+    d->y_off = 0;
+    if (d->rotation & 1) {
+        d->width  = ST7789_NATIVE_H;   /* landscape: 320 wide */
+        d->height = ST7789_NATIVE_W;   /*            240 tall */
+    } else {
+        d->width  = ST7789_NATIVE_W;
+        d->height = ST7789_NATIVE_H;
+    }
 
     d->bus->set_cs(d->bus->ctx, true);
     cmd8(d, ST7789_MADCTL, madctl);
@@ -81,7 +84,7 @@ void st7789_init(st7789_t *d, const st7789_bus_t *bus, uint8_t rotation)
     cmd8(d, ST7789_COLMOD, 0x55);
     bus->delay_ms(bus->ctx, 10);
 
-    /* Adafruit's 240x240 breakout ships with the panel inverted; without
+    /* Adafruit's ST7789 IPS panels ship inverted; without
      * INVON everything comes up as a photographic negative. This surprises
      * everyone exactly once. */
     cmd(d, ST7789_INVON);

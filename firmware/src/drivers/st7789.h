@@ -1,5 +1,5 @@
 /*
- * st7789 — driver for the Adafruit 1.3" 240x240 IPS TFT.
+ * st7789 — driver for the Adafruit 2.0" 320x240 IPS TFT (product 4311).
  *
  * The driver never touches an STM32 register. All hardware access goes
  * through a st7789_bus_t of function pointers, so:
@@ -11,10 +11,15 @@
  * are almost always "wrong init sequence" or "wrong column offset", and both
  * are things you can get right before the board arrives.
  *
- * Note on this specific panel: the 240x240 ST7789 has no offset in its
- * default rotation, but rotations 2 and 3 need a 80-pixel row offset because
- * the controller's frame memory is 240x320. Getting this wrong shows up as
- * a picture shifted off the bottom of the screen.
+ * Note on this specific panel: it is 240x320 glass on a 240x320 controller,
+ * so it uses the whole frame memory and needs no offsets in any rotation.
+ * (The old 1.3" 240x240 panel was a window into that memory and needed an
+ * 80-pixel shift in rotations 2 and 3 — x_off/y_off are kept, at zero, for
+ * the next panel that isn't a perfect fit.)
+ *
+ * Rotations 0 and 2 are portrait (240x320); 1 and 3 are landscape (320x240).
+ * The DAP runs landscape. Which of 1 and 3 is right-side up depends only on
+ * which way the board is mounted.
  */
 #ifndef ST7789_H
 #define ST7789_H
@@ -23,8 +28,9 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define ST7789_WIDTH  240
-#define ST7789_HEIGHT 240
+/* Native (rotation 0, portrait) size of the panel. */
+#define ST7789_NATIVE_W 240
+#define ST7789_NATIVE_H 320
 
 /* Commands used by this driver. */
 enum {

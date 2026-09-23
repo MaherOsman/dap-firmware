@@ -3,10 +3,10 @@
 #include "../src/core/theme.h"
 #include "../src/ui/screen_library.h"
 
-static uint16_t fb[240 * 240];
+static uint16_t fb[SCREEN_W * SCREEN_H];
 static gfx_t g;
 
-static void setup(void) { gfx_init(&g, fb, 240, 240); gfx_clear(&g, 0); }
+static void setup(void) { gfx_init(&g, fb, SCREEN_W, SCREEN_H); gfx_clear(&g, 0); }
 
 TEST(rgb565_packing_and_888_conversion)
 {
@@ -34,21 +34,21 @@ TEST(drawing_off_screen_is_safe)
     setup();
     /* None of these may write out of bounds — ASan proves it. */
     gfx_fill_rect(&g, -50, -50, 20, 20, 0xFFFF);
-    gfx_fill_rect(&g, 235, 235, 100, 100, 0xFFFF);
+    gfx_fill_rect(&g, SCREEN_W - 5, SCREEN_H - 5, 100, 100, 0xFFFF);
     gfx_fill_rect(&g, 1000, 1000, 10, 10, 0xFFFF);
     gfx_pixel(&g, -1, 0, 0xFFFF);
     gfx_pixel(&g, 0, -1, 0xFFFF);
-    gfx_pixel(&g, 240, 0, 0xFFFF);
-    gfx_pixel(&g, 0, 240, 0xFFFF);
+    gfx_pixel(&g, SCREEN_W, 0, 0xFFFF);
+    gfx_pixel(&g, 0, SCREEN_H, 0xFFFF);
     CHECK_EQ(gfx_get(&g, 0, 0), 0x0000);
-    CHECK_EQ(gfx_get(&g, 239, 239), 0xFFFF); /* the 235,235 rect did land */
+    CHECK_EQ(gfx_get(&g, SCREEN_W - 1, SCREEN_H - 1), 0xFFFF); /* the corner rect did land */
 }
 
 TEST(clipping_confines_drawing)
 {
     setup();
     gfx_clip(&g, 100, 100, 20, 20);
-    gfx_fill_rect(&g, 0, 0, 240, 240, 0xFFFF);
+    gfx_fill_rect(&g, 0, 0, SCREEN_W, SCREEN_H, 0xFFFF);
     CHECK_EQ(gfx_get(&g, 99, 100), 0x0000);
     CHECK_EQ(gfx_get(&g, 100, 100), 0xFFFF);
     CHECK_EQ(gfx_get(&g, 119, 119), 0xFFFF);
@@ -64,9 +64,9 @@ TEST(clear_ignores_the_clip_rect)
     gfx_clip(&g, 50, 50, 10, 10);
     gfx_clear(&g, 0x1234);
     CHECK_EQ(gfx_get(&g, 0, 0), 0x1234);
-    CHECK_EQ(gfx_get(&g, 239, 239), 0x1234);
+    CHECK_EQ(gfx_get(&g, SCREEN_W - 1, SCREEN_H - 1), 0x1234);
     /* And the clip must be restored afterwards. */
-    gfx_fill_rect(&g, 0, 0, 240, 240, 0xFFFF);
+    gfx_fill_rect(&g, 0, 0, SCREEN_W, SCREEN_H, 0xFFFF);
     CHECK_EQ(gfx_get(&g, 0, 0), 0x1234);
     CHECK_EQ(gfx_get(&g, 55, 55), 0xFFFF);
 }
@@ -114,12 +114,12 @@ TEST(text_lands_in_the_framebuffer)
 TEST(text_respects_the_clip_rect)
 {
     setup();
-    gfx_clip(&g, 0, 0, 20, 240);
+    gfx_clip(&g, 0, 0, 20, SCREEN_H);
     gfx_text(&g, &font_md, "This is much wider than twenty pixels", 0, 5,
              0xFFFF);
     gfx_clip_reset(&g);
     for (int y = 0; y < 30; y++) {
-        for (int x = 20; x < 240; x++) {
+        for (int x = 20; x < SCREEN_W; x++) {
             if (gfx_get(&g, x, y)) {
                 CHECK_EQ(x, -1); /* report the offending column */
                 return;
@@ -153,7 +153,7 @@ TEST(library_visible_rows_is_consistent)
 {
     /* The simulator computed this in two places from duplicated constants.
      * Here there is one definition, and this pins its value. */
-    CHECK_EQ(LIB_VISIBLE, (240 - 24 - 15) / 18);
+    CHECK_EQ(LIB_VISIBLE, (SCREEN_H - 24 - 15) / 18);
     CHECK_EQ(LIB_VISIBLE, 11);
 }
 
@@ -224,7 +224,7 @@ TEST(scrollbar_appears_only_when_needed)
     screen_library_draw(&g, &THEME_DARK, rows, 5, 0, 0, "H", LIB_LEVEL_TRACK);
     bool found = false;
     for (int y = LIB_LIST_TOP; y < LIB_LIST_BOT; y++)
-        if (gfx_get(&g, 237, y) == THEME_DARK.surface_alt) found = true;
+        if (gfx_get(&g, SCREEN_W - 3, y) == THEME_DARK.surface_alt) found = true;
     CHECK(!found); /* 5 rows fit — no scrollbar */
 
     setup();
@@ -236,7 +236,7 @@ TEST(scrollbar_appears_only_when_needed)
     screen_library_draw(&g, &THEME_DARK, many, 60, 0, 0, "H", LIB_LEVEL_TRACK);
     found = false;
     for (int y = LIB_LIST_TOP; y < LIB_LIST_BOT; y++)
-        if (gfx_get(&g, 237, y) == THEME_DARK.surface_alt) found = true;
+        if (gfx_get(&g, SCREEN_W - 3, y) == THEME_DARK.surface_alt) found = true;
     CHECK(found);
 }
 

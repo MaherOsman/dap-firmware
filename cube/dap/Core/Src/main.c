@@ -61,10 +61,8 @@ UART_HandleTypeDef huart3;
 
 /* USER CODE BEGIN PV */
 
-#define TFT_W 240
-#define TFT_H 240
 #define RGB565_RED 0xF800
-static uint16_t fb_storage[240 * 240];
+static uint16_t fb_storage[SCREEN_W * SCREEN_H];   /* 150 KB, AXI SRAM */
 static gfx_t    fb;
 static st7789_t tft;
 extern const st7789_bus_t platform_st7789_bus;
@@ -151,8 +149,9 @@ int main(void)
     HAL_GPIO_WritePin(SD_CS_GPIO_Port, SD_CS_Pin, GPIO_PIN_SET);
     HAL_GPIO_WritePin(TFT_CS_GPIO_Port, TFT_CS_Pin, GPIO_PIN_SET);
 
-    gfx_init(&fb, fb_storage, 240, 240);
-    st7789_init(&tft, &platform_st7789_bus, 0);
+    gfx_init(&fb, fb_storage, SCREEN_W, SCREEN_H);
+    /* Landscape. If the picture comes up upside down, use 3 instead. */
+    st7789_init(&tft, &platform_st7789_bus, 1);
 
     /* Green flash proves the panel is alive. The panel retains its last
      * image across resets, so this must be a colour no screen uses. */

@@ -66,7 +66,7 @@ extern const theme_t *const ALL_THEMES[];
 extern const int THEME_COUNT;
 
 /* Panel geometry — the real one, not the simulator's. */
-#define SCREEN_W 240
+#define SCREEN_W 320
 #define SCREEN_H 240
 
 /* Library list metrics. Derived in ONE place: the simulator computed the

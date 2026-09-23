@@ -1,5 +1,5 @@
 /*
- * preview — render real screens at true 240x240 and write them out as PPM.
+ * preview — render real screens at true 320x240 and write them out as PPM.
  *
  * This is the payoff of drawing into a framebuffer instead of straight to
  * SPI: the pixels produced here are bit-for-bit the pixels the ST7789 will
@@ -207,7 +207,7 @@ int main(void)
 {
     gfx_init(&g, fb, SCREEN_W, SCREEN_H);
 
-    printf("Rendering 240x240 previews...\n");
+    printf("Rendering 320x240 previews...\n");
 
     render_artist_level(&THEME_DARK, "build/preview/library_dark.ppm");
     render_artist_level(&THEME_IPOD, "build/preview/library_ipod.ppm");

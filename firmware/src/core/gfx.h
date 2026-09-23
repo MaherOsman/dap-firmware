@@ -4,7 +4,7 @@
  * Why a framebuffer at all, when the ST7789 has its own memory: drawing
  * straight to the panel over SPI means every overlapping element causes a
  * visible repaint, and text on a coloured background needs two passes. A
- * 240x240x16bpp buffer is 115,200 bytes — which the H7 has plenty of (1 MB
+ * 320x240x16bpp buffer is 153,600 bytes — which the H7 has plenty of (1 MB
  * of RAM) — and it lets us compose a frame in RAM and push it out in one
  * DMA transfer.
  *
