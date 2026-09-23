@@ -69,6 +69,12 @@ void gfx_blit(gfx_t *g, int x, int y, int w, int h, const uint16_t *src);
 void gfx_veil_rect(gfx_t *g, int x, int y, int w, int h, uint16_t color,
                    int amount);
 
+/* A 32-bit fingerprint of rows [y, y+rows). Two bands with the same hash are
+ * treated as identical, which is what lets the panel push skip bands that
+ * did not change since the last frame. FNV-1a: a few cycles per pixel, and
+ * no second 150 KB framebuffer to compare against. */
+uint32_t gfx_band_hash(const gfx_t *g, int y, int rows);
+
 /* Read a pixel — for tests and for the PNG writer. */
 uint16_t gfx_get(const gfx_t *g, int x, int y);
 

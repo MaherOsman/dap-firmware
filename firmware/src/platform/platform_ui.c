@@ -422,15 +422,34 @@ void dap_ui_input(int delta, int btn)
 
 /* ---------------------------------------------------------- paint */
 
+/* One fingerprint per band of what the panel is currently showing. Most
+ * frames change a small part of the screen — a list selection moving, the
+ * scrubber advancing — so the push skips every band whose pixels match what
+ * was sent last time. A full frame costs ~80 ms of SPI; moving the library
+ * selection now costs two or three bands, ~10 ms.
+ *
+ * Starts invalid, because at boot the panel holds whatever main() drew
+ * (the green flash), not anything this cache knows about. */
+#define PANEL_MAX_BANDS 64
+static uint32_t g_band_hash[PANEL_MAX_BANDS];
+static bool     g_band_valid;
+
 static void push_panel(void)
 {
     const int w = g_fb->w;
     const int h = g_fb->h;
-    int y;
+    int y, band;
 
-    for (y = 0; y < h; y += PANEL_BAND_ROWS) {
+    for (y = 0, band = 0; y < h; y += PANEL_BAND_ROWS, band++) {
         int rows = PANEL_BAND_ROWS;
+        uint32_t hash;
         if (y + rows > h) rows = h - y;
+
+        hash = gfx_band_hash(g_fb, y, rows);
+        if (band < PANEL_MAX_BANDS) {
+            if (g_band_valid && g_band_hash[band] == hash) continue;
+            g_band_hash[band] = hash;
+        }
 
         g_tft->bus->set_cs(g_tft->bus->ctx, true);
         st7789_set_window(g_tft, 0, (uint16_t)y, (uint16_t)(w - 1),
@@ -445,6 +464,7 @@ static void push_panel(void)
          * frame. */
         plat_audio_service();
     }
+    g_band_valid = true;
 }
 
 static void paint(void)

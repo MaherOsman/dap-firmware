@@ -229,3 +229,22 @@ void gfx_veil_rect(gfx_t *g, int x, int y, int w, int h, uint16_t color,
         }
     }
 }
+
+uint32_t gfx_band_hash(const gfx_t *g, int y, int rows)
+{
+    uint32_t h = 2166136261u;
+    const uint16_t *p;
+    size_t n;
+
+    if (y < 0) { rows += y; y = 0; }
+    if (y + rows > g->h) rows = g->h - y;
+    if (rows <= 0) return h;
+
+    p = g->px + (size_t)y * (size_t)g->w;
+    n = (size_t)rows * (size_t)g->w;
+    while (n--) {
+        h ^= *p++;
+        h *= 16777619u;
+    }
+    return h;
+}

@@ -303,6 +303,27 @@ TEST(veil_moves_pixels_toward_the_colour)
     CHECK_EQ(gfx_get(&g, 3, 3), 0x1234);
 }
 
+TEST(band_hash_sees_a_one_pixel_change_only_in_its_own_band)
+{
+    uint32_t a0, a1, b0, b1;
+
+    setup();
+    a0 = gfx_band_hash(&g, 0, 16);
+    a1 = gfx_band_hash(&g, 16, 16);
+    CHECK_EQ(gfx_band_hash(&g, 0, 16), a0);       /* stable */
+
+    gfx_pixel(&g, SCREEN_W - 1, 20, 0x0001);      /* lowest bit, last column */
+    b0 = gfx_band_hash(&g, 0, 16);
+    b1 = gfx_band_hash(&g, 16, 16);
+    CHECK_EQ(b0, a0);
+    CHECK(b1 != a1);
+
+    /* Clamped at the edges rather than reading past the buffer. */
+    (void)gfx_band_hash(&g, SCREEN_H - 4, 16);
+    (void)gfx_band_hash(&g, -8, 16);
+    CHECK(true);
+}
+
 int main(void)
 {
     printf("gfx + library screen\n");
@@ -325,5 +346,6 @@ int main(void)
     RUN(every_theme_is_distinct_and_readable);
     RUN(blit_copies_and_clips);
     RUN(veil_moves_pixels_toward_the_colour);
+    RUN(band_hash_sees_a_one_pixel_change_only_in_its_own_band);
     return TEST_SUMMARY();
 }
