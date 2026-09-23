@@ -31,6 +31,22 @@ def thirds(w, h):
     return im
 
 
+def detailed(n):
+    """Fine lines, rings and gradients: an image where detail shows."""
+    import random
+    rnd = random.Random(7)
+    im = Image.new("RGB", (n, n))
+    d = ImageDraw.Draw(im)
+    for y in range(n):
+        d.line([(0, y), (n - 1, y)], fill=(40 + 150 * y // n, 50, 190 - 120 * y // n))
+    for x in range(0, n, 9):
+        d.line([(x, 0), (x, n // 2)], fill=(235, 230, 210), width=2)
+    for _ in range(14):
+        x, y, r = rnd.randrange(n), rnd.randrange(n // 2, n), rnd.randrange(8, n // 4)
+        d.ellipse([x - r, y - r, x + r, y + r], outline=(250, 140, 60), width=2)
+    return im
+
+
 def gray_halves(n):
     im = Image.new("L", (n, n), 40)
     ImageDraw.Draw(im).rectangle([n // 2, 0, n - 1, n - 1], fill=200)
@@ -73,9 +89,11 @@ FIXTURES = [
     ("gray",     "300x300 greyscale, dark left half, light right half", jpeg(gray_halves(300))),
     ("prog",     "200x200 progressive quadrants, 4:2:0", jpeg(quadrants(200), progressive=True)),
     ("prog1600", "1600x1600 progressive quadrants, cut after the first scan", first_scan_only(jpeg(quadrants(1600), progressive=True, quality=75))),
+    ("detbase",  "256x256 detailed image, baseline", jpeg(detailed(256), quality=80)),
+    ("detprog",  "the same image, progressive", jpeg(detailed(256), quality=80, progressive=True)),
     ("proggray", "300x300 progressive greyscale halves", jpeg(gray_halves(300), progressive=True)),
     ("progwide", "600x300 progressive thirds, 4:4:4", jpeg(thirds(600, 300), progressive=True, subsampling=0)),
-    ("progrst",  "400x400 progressive with restart markers, cut after the first scan", first_scan_only(jpeg(quadrants(400), progressive=True, restart_marker_blocks=3))),
+    ("progrst",  "400x400 progressive with restart markers, cut after the first scan", jpeg(quadrants(400), progressive=True, restart_marker_blocks=3)),
 ]
 
 with open("tests/art_fixtures.h", "w") as f:

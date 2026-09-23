@@ -99,6 +99,7 @@ art_fmt_t art_probe(const lib_io_t *io, void *fh, uint32_t offset,
 typedef struct {
     const lib_io_t *io;
     void     *fh;
+    uint32_t  start;          /* where the image begins */
     uint32_t  pos;            /* absolute file offset of the next byte */
     uint32_t  end;            /* one past the last byte; 0 = end of file */
     void    (*yield)(void *ctx);

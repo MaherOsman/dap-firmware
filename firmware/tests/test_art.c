@@ -30,12 +30,13 @@ static size_t mem_read(void *ctx, uint8_t *buf, size_t len)
 }
 
 static void mem_yield(void *ctx) { ((mem_t *)ctx)->yields++; }
+static bool mem_rewind(void *ctx) { ((mem_t *)ctx)->pos = 0; return true; }
 
 static art_result_t decode(const uint8_t *data, size_t len, int size,
                            art_info_t *info, int *yields)
 {
     mem_t m = { data, len, 0, 0 };
-    art_src_t src = { mem_read, mem_yield, &m };
+    art_src_t src = { mem_read, mem_yield, &m, NULL };
     art_result_t r;
     int i;
 
@@ -161,7 +162,7 @@ static art_result_t decode_prog(const uint8_t *data, size_t len, int size,
                                 art_info_t *info, size_t *used)
 {
     mem_t m = { data, len, 0, 0 };
-    art_src_t src = { mem_read, mem_yield, &m };
+    art_src_t src = { mem_read, mem_yield, &m, mem_rewind };
     art_result_t r;
     int i;
 
@@ -174,13 +175,13 @@ static art_result_t decode_prog(const uint8_t *data, size_t len, int size,
 #define DECODE_PROG(fix, size, info) \
     decode_prog((fix), sizeof(fix), (size), (info), NULL)
 
-TEST(a_small_progressive_cover_is_enlarged_from_its_first_pass)
+TEST(a_small_progressive_cover_decodes_at_full_detail)
 {
     art_info_t info;
-    /* 200 px -> 25 px first pass -> enlarged. Quadrant centres hold. */
+    /* 200 px at 176: every coefficient is needed, full 8x8 blocks. */
     CHECK_EQ(DECODE_PROG(FIX_PROG, 176, &info), ART_OK);
     CHECK_EQ(info.src_w, 200);
-    CHECK_EQ(info.scale, 3);
+    CHECK_EQ(info.scale, 0);
     check_quadrants(176);
     CHECK_EQ(DECODE_PROG(FIX_PROG, 216, NULL), ART_OK);
     check_quadrants(216);
@@ -188,8 +189,10 @@ TEST(a_small_progressive_cover_is_enlarged_from_its_first_pass)
 
 TEST(a_big_progressive_cover_shrinks_and_needs_only_its_first_pass)
 {
-    /* The fixture stops right after the first scan. Decoding succeeds,
-     * which is the proof that nothing past it is ever read. */
+    /* The fixture stops right after the first scan. At 176 px a 1600 px
+     * cover needs only that (1/8 is already sharp) — decoding succeeds,
+     * proof nothing past it is read. At 216 px the next passes would add
+     * detail; the file ending early still gives the whole picture. */
     size_t used = 0;
     CHECK_EQ(decode_prog(FIX_PROG1600, sizeof(FIX_PROG1600), 176, NULL, &used),
              ART_OK);
@@ -215,6 +218,50 @@ TEST(progressive_greyscale_and_444_and_restarts_decode)
 
     CHECK_EQ(DECODE_PROG(FIX_PROGRST, s, NULL), ART_OK);
     check_quadrants(s);
+}
+
+/* Mean absolute difference in green (the 6-bit, luma-heavy channel)
+ * between the output and a saved copy. */
+static uint16_t g_ref[ART_MAX_SIZE * ART_MAX_SIZE];
+
+static int mean_green_diff(int size)
+{
+    int i, total = 0;
+    for (i = 0; i < size * size; i++) {
+        total += abs((int)((g_out[i] >> 5) & 0x3F) - (int)((g_ref[i] >> 5) & 0x3F));
+    }
+    return total * 255 / 63 / (size * size);
+}
+
+TEST(a_progressive_cover_is_as_sharp_as_the_same_cover_saved_baseline)
+{
+    art_info_t info;
+    int d;
+
+    /* Same image, saved both ways. The progressive decode must land close
+     * to the baseline one — not the soft first-pass-only picture, which
+     * misses most of the fine lines. */
+    CHECK_EQ(DECODE(FIX_DETBASE, 96, NULL), ART_OK);
+    memcpy(g_ref, g_out, sizeof(g_ref));
+    CHECK_EQ(DECODE_PROG(FIX_DETPROG, 96, &info), ART_OK);
+    CHECK_EQ(info.scale, 1);                  /* 4x4 per block */
+    CHECK_EQ(untouched(96), 0);
+    d = mean_green_diff(96);
+    CHECK(d <= 10);                           /* measured: 6 */
+
+    /* What the first pass alone gives (1/8 = 32 px, enlarged 3x): the
+     * blurry picture this path exists to avoid. It must be far worse. */
+    {
+        static uint16_t small[32 * 32];
+        int x, y;
+        CHECK_EQ(DECODE_PROG(FIX_DETPROG, 32, &info), ART_OK);
+        CHECK_EQ(info.scale, 3);
+        memcpy(small, g_out, sizeof(small));
+        for (y = 0; y < 96; y++) {
+            for (x = 0; x < 96; x++) g_out[y * 96 + x] = small[(y / 3) * 32 + x / 3];
+        }
+        CHECK(mean_green_diff(96) >= 3 * d);  /* measured: 28 vs 6 */
+    }
 }
 
 TEST(the_progressive_path_turns_away_what_it_cannot_do)
@@ -267,15 +314,15 @@ TEST(the_decode_yields_to_the_audio_regularly)
 TEST(a_null_yield_is_fine)
 {
     mem_t m = { FIX_QUAD400, sizeof(FIX_QUAD400), 0, 0 };
-    art_src_t src = { mem_read, NULL, &m };
+    art_src_t src = { mem_read, NULL, &m, NULL };
     CHECK_EQ(art_decode_jpeg(&src, g_out, 176, &g_work, NULL), ART_OK);
 }
 
 TEST(bad_arguments_are_rejected)
 {
     mem_t m = { FIX_QUAD400, sizeof(FIX_QUAD400), 0, 0 };
-    art_src_t src = { mem_read, NULL, &m };
-    art_src_t no_read = { NULL, NULL, &m };
+    art_src_t src = { mem_read, NULL, &m, NULL };
+    art_src_t no_read = { NULL, NULL, &m, NULL };
 
     CHECK_EQ(art_decode_jpeg(NULL, g_out, 176, &g_work, NULL), ART_ERR_ARG);
     CHECK_EQ(art_decode_jpeg(&no_read, g_out, 176, &g_work, NULL), ART_ERR_ARG);
@@ -305,9 +352,10 @@ int main(void)
     RUN(a_wide_cover_is_cropped_to_its_centre);
     RUN(greyscale_covers_decode);
     RUN(progressive_jpegs_are_turned_away_by_the_baseline_path);
-    RUN(a_small_progressive_cover_is_enlarged_from_its_first_pass);
+    RUN(a_small_progressive_cover_decodes_at_full_detail);
     RUN(a_big_progressive_cover_shrinks_and_needs_only_its_first_pass);
     RUN(progressive_greyscale_and_444_and_restarts_decode);
+    RUN(a_progressive_cover_is_as_sharp_as_the_same_cover_saved_baseline);
     RUN(the_progressive_path_turns_away_what_it_cannot_do);
     RUN(damaged_input_fails_cleanly);
     RUN(the_decode_yields_to_the_audio_regularly);

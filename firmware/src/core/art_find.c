@@ -546,6 +546,13 @@ static size_t reader_read(void *ctx, uint8_t *buf, size_t len)
     return got;
 }
 
+static bool reader_rewind(void *ctx)
+{
+    art_reader_t *rd = (art_reader_t *)ctx;
+    rd->pos = rd->start;
+    return true;
+}
+
 static void reader_yield(void *ctx)
 {
     art_reader_t *rd = (art_reader_t *)ctx;
@@ -565,6 +572,7 @@ bool art_open(const lib_io_t *io, const art_ref_t *ref, art_reader_t *rd,
         return false;
     }
     rd->io = io;
+    rd->start = ref->offset;
     rd->pos = ref->offset;
     rd->end = (ref->length != 0u) ? ref->offset + ref->length : 0u;
     rd->yield = yield;
@@ -573,6 +581,7 @@ bool art_open(const lib_io_t *io, const art_ref_t *ref, art_reader_t *rd,
     src->read = reader_read;
     src->yield = reader_yield;
     src->ctx = rd;
+    src->rewind = reader_rewind;
     return true;
 }
 
