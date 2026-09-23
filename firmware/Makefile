@@ -23,7 +23,8 @@ CORE    := src/core/ringbuf.c src/core/wav.c src/core/audio.c \
            src/core/library_build.c \
            src/core/browse.c \
            src/core/playqueue.c \
-           src/core/config.c
+           src/core/config.c \
+           src/core/art.c
 
 DRIVERS := src/drivers/st7789.c
 UI      := src/ui/screen_library.c src/ui/screen_now_playing.c src/ui/screen_settings.c
@@ -31,7 +32,7 @@ UI      := src/ui/screen_library.c src/ui/screen_now_playing.c src/ui/screen_set
 # dr_flac is third-party and will not survive -Werror -Wconversion. It gets
 # its own relaxed rule rather than us editing someone else's library, which
 # would have to be redone on every update.
-VENDOR_OBJ := $(BUILD)/dr_flac_impl.o $(BUILD)/dr_mp3_impl.o
+VENDOR_OBJ := $(BUILD)/dr_flac_impl.o $(BUILD)/dr_mp3_impl.o $(BUILD)/tjpgd_impl.o
 VENDOR_CFLAGS := -std=c11 -O2 -g -w
 
 $(BUILD)/dr_flac_impl.o: src/core/dr_flac_impl.c third_party/dr_flac.h | $(BUILD)
@@ -40,10 +41,14 @@ $(BUILD)/dr_flac_impl.o: src/core/dr_flac_impl.c third_party/dr_flac.h | $(BUILD
 $(BUILD)/dr_mp3_impl.o: src/core/dr_mp3_impl.c third_party/dr_mp3.h | $(BUILD)
 	$(CC) $(VENDOR_CFLAGS) -c -o $@ $<
 
+$(BUILD)/tjpgd_impl.o: src/core/tjpgd_impl.c third_party/tjpgd/tjpgd.c third_party/tjpgd/tjpgdcnf.h | $(BUILD)
+	$(CC) $(VENDOR_CFLAGS) -c -o $@ $<
+
 TESTS   := test_ringbuf test_wav test_audio test_encoder \
            test_player test_st7789 test_font test_gfx test_decoder \
            test_decoder_flac test_decoder_mp3 test_library_index test_library_build \
-           test_browse test_playqueue test_screen_now_playing test_config test_screen_settings
+           test_browse test_playqueue test_screen_now_playing test_config test_screen_settings \
+           test_art
 
 BINS    := $(addprefix $(BUILD)/,$(TESTS))
 
