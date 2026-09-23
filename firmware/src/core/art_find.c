@@ -393,7 +393,7 @@ static bool is_disc_dir(const char *path, size_t len)
 /* Tries every folder image name in the directory path[0..len). Stops at
  * the first decodable one; remembers the best undecodable one in `alt`. */
 static bool scan_folder(const lib_io_t *io, const char *path, size_t len,
-                        art_ref_t *out, art_ref_t *alt)
+                        art_ref_t *out, art_ref_t *alt, int *skip)
 {
     char buf[ART_PATH_MAX + 1];
     size_t i, j;
@@ -415,6 +415,10 @@ static bool scan_folder(const lib_io_t *io, const char *path, size_t len,
             fmt = art_probe(io, fh, 0, 0);
             io->close(io->ctx, fh);
 
+            if (fmt == ART_FMT_JPEG && *skip > 0) {
+                (*skip)--;                 /* already tried by the caller */
+                continue;
+            }
             if (fmt == ART_FMT_JPEG) {
                 out->fmt = fmt;
                 out->from = ART_FROM_FOLDER;
@@ -437,8 +441,15 @@ static bool scan_folder(const lib_io_t *io, const char *path, size_t len,
 
 bool art_find(const lib_io_t *io, const char *track_path, art_ref_t *out)
 {
+    return art_find_nth(io, track_path, 0, out);
+}
+
+bool art_find_nth(const lib_io_t *io, const char *track_path, int nth,
+                  art_ref_t *out)
+{
     art_ref_t alt, emb;
     size_t d;
+    int skip = nth;
 
     if (out != NULL) memset(out, 0, sizeof(*out));
     if (io == NULL || track_path == NULL || out == NULL ||
@@ -449,14 +460,16 @@ bool art_find(const lib_io_t *io, const char *track_path, art_ref_t *out)
     memset(&alt, 0, sizeof(alt));
 
     d = dir_len(track_path, strlen(track_path));
-    if (scan_folder(io, track_path, d, out, &alt)) return true;
+    if (scan_folder(io, track_path, d, out, &alt, &skip)) return true;
     if (is_disc_dir(track_path, d)) {
         size_t up = dir_len(track_path, d - 1u);
-        if (scan_folder(io, track_path, up, out, &alt)) return true;
+        if (scan_folder(io, track_path, up, out, &alt, &skip)) return true;
     }
 
     if (art_find_embedded(io, track_path, &emb)) {
-        if (emb.fmt == ART_FMT_JPEG) {
+        if (emb.fmt == ART_FMT_JPEG && skip > 0) {
+            skip--;
+        } else if (emb.fmt == ART_FMT_JPEG) {
             *out = emb;
             return true;
         }

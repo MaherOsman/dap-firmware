@@ -76,6 +76,16 @@ typedef struct {
  */
 bool art_find(const lib_io_t *io, const char *track_path, art_ref_t *out);
 
+/*
+ * The same search, but returning the `nth` decodable candidate (0 is what
+ * art_find returns). When a cover passes the probe but still fails to
+ * decode — an unusual colour layout inside an otherwise normal JPEG — the
+ * caller asks for n = 1, 2, ... so a second image or embedded art gets its
+ * turn instead of the album going straight to the placeholder.
+ */
+bool art_find_nth(const lib_io_t *io, const char *track_path, int nth,
+                  art_ref_t *out);
+
 /* Pieces of art_find, exposed for the tests. */
 bool art_find_embedded(const lib_io_t *io, const char *path, art_ref_t *out);
 art_fmt_t art_probe(const lib_io_t *io, void *fh, uint32_t offset,

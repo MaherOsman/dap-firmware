@@ -485,6 +485,26 @@ TEST(bad_arguments_are_safe)
     CHECK(art_from_name(ART_FROM_ID3)[0] != '?');
 }
 
+TEST(later_candidates_can_be_asked_for_in_order)
+{
+    lib_io_t io = make_io();
+    art_ref_t r;
+
+    fs_reset();
+    add_mp3("/M/01.mp3", 3, 3u, FIX_QUAD64, sizeof(FIX_QUAD64), 0);
+    add_image("/M/folder.jpg", FIX_QUAD400, sizeof(FIX_QUAD400));
+    add_image("/M/cover.jpg", FIX_QUAD64, sizeof(FIX_QUAD64));
+
+    CHECK(art_find_nth(&io, "/M/01.mp3", 0, &r));
+    CHECK(strcmp(r.path, "/M/cover.jpg") == 0);
+    CHECK(art_find_nth(&io, "/M/01.mp3", 1, &r));
+    CHECK(strcmp(r.path, "/M/folder.jpg") == 0);
+    CHECK(art_find_nth(&io, "/M/01.mp3", 2, &r));
+    CHECK_EQ(r.from, ART_FROM_ID3);
+    CHECK(!art_find_nth(&io, "/M/01.mp3", 3, &r));
+    CHECK_EQ(g_open_count, 0);
+}
+
 int main(void)
 {
     printf("art_find\n");
@@ -500,5 +520,6 @@ int main(void)
     RUN(found_art_decodes_through_the_reader);
     RUN(damaged_containers_never_hang_or_crash);
     RUN(bad_arguments_are_safe);
+    RUN(later_candidates_can_be_asked_for_in_order);
     return TEST_SUMMARY();
 }

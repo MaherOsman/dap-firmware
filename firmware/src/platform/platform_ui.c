@@ -127,15 +127,16 @@ static void capture_track(uint32_t track)
  * deliberately not touched here. */
 static void refresh_np(void)
 {
-    /* Album art — only for the now-playing screen itself. The cache makes
-     * this free after the first call per album; the first call decodes. */
+    /* Album art — only what is already cached. Painting never decodes:
+     * the screen appears straight away with the placeholder, and
+     * load_pending_art() fills the cover in right after. */
     g_np.art = NULL;
     g_np.art_size = 0u;
     if (g_screen == UI_NOW_PLAYING && g_idx != NULL &&
         pq_current(&g_pq) != PQ_NO_TRACK) {
         int size = np_art_size(g_np.layout);
         uint32_t album = libidx_album_of_track(g_idx, pq_current(&g_pq));
-        g_np.art = plat_art_for(album, g_path, size);
+        g_np.art = plat_art_cached(album, size, NULL);
         if (g_np.art != NULL) g_np.art_size = (uint16_t)size;
     }
 
@@ -520,6 +521,33 @@ static void paint(void)
     g_dirty = false;
 }
 
+/* If the now-playing screen is showing a placeholder only because its
+ * cover has not been decoded yet, decode it now and schedule a repaint.
+ * Runs after a paint, so the screen change itself is never held up by the
+ * decode — you land on now-playing at once and the art arrives after. */
+static void load_pending_art(void)
+{
+    uint32_t track, album;
+    int size;
+    bool known;
+
+    if (g_screen != UI_NOW_PLAYING || g_idx == NULL) return;
+    track = pq_current(&g_pq);
+    if (track == PQ_NO_TRACK) return;
+
+    size = np_art_size(g_np.layout);
+    album = libidx_album_of_track(g_idx, track);
+    (void)plat_art_cached(album, size, &known);
+    if (known) return;
+
+    (void)plat_art_for(album, g_path, size);
+    g_dirty = true;
+
+    /* The decode may have taken a while; do not let it eat the art-only
+     * controls' time on screen. */
+    if (g_np.overlay) g_overlay_at = HAL_GetTick();
+}
+
 void dap_ui_tick(void)
 {
     uint32_t now = HAL_GetTick();
@@ -562,4 +590,6 @@ void dap_ui_tick(void)
     if (g_dirty) {
         paint();
     }
+
+    load_pending_art();
 }

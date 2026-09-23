@@ -18,6 +18,7 @@
 #ifndef PLATFORM_ART_H
 #define PLATFORM_ART_H
 
+#include <stdbool.h>
 #include <stdint.h>
 
 /* Call once at start-up, before the first plat_art_for(). */
@@ -33,6 +34,14 @@ void plat_art_init(void);
  * until the next call with a different album or size.
  */
 const uint16_t *plat_art_for(uint32_t album, const char *track_path, int size);
+
+/*
+ * The cached cover for `album` at `size`, without ever decoding. Sets
+ * *known to true when the cache already has an answer for that album and
+ * size — the image, or "this album has no usable art" (returns NULL).
+ * *known false means plat_art_for() still has work to do.
+ */
+const uint16_t *plat_art_cached(uint32_t album, int size, bool *known);
 
 /* Drops the cache. Album numbers change on a rescan. */
 void plat_art_forget(void);

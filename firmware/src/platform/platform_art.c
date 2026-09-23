@@ -49,6 +49,13 @@ void plat_art_forget(void)
     g_have = false;
 }
 
+const uint16_t *plat_art_cached(uint32_t album, int size, bool *known)
+{
+    bool hit = g_ready && g_key_valid && album == g_album && size == g_size;
+    if (known != NULL) *known = hit;
+    return (hit && g_have) ? g_img : NULL;
+}
+
 static void yield_to_audio(void *ctx)
 {
     (void)ctx;
@@ -62,8 +69,9 @@ const uint16_t *plat_art_for(uint32_t album, const char *track_path, int size)
     art_reader_t rd;
     art_src_t src;
     art_info_t info;
-    art_result_t r;
+    art_result_t r = ART_ERR_ARG;
     uint32_t t0;
+    int n;
 
     if (!g_ready || track_path == NULL || track_path[0] == '\0' ||
         size < 1 || size > NP_ART_LARGE || io == NULL) {
@@ -82,28 +90,36 @@ const uint16_t *plat_art_for(uint32_t album, const char *track_path, int size)
     g_have = false;
 
     t0 = HAL_GetTick();
-    if (!art_find(io, track_path, &ref)) {
-        if (ref.fmt == ART_FMT_NONE) {
-            printf("art: none found for %s\r\n", track_path);
-        } else {
-            printf("art: %s %s not supported yet: %s\r\n",
-                   art_from_name(ref.from), art_fmt_name(ref.fmt), ref.path);
+
+    /* A cover can pass the format check and still fail to decode (an
+     * unusual colour layout inside a normal-looking JPEG). Then the next
+     * candidate gets a turn — another folder image, or the embedded art —
+     * rather than the album going straight to the placeholder. */
+    for (n = 0; n < 4; n++) {
+        if (!art_find_nth(io, track_path, n, &ref)) {
+            if (n > 0) return NULL;        /* failures already logged */
+            if (ref.fmt == ART_FMT_NONE) {
+                printf("art: none found for %s\r\n", track_path);
+            } else {
+                printf("art: %s %s not supported yet: %s\r\n",
+                       art_from_name(ref.from), art_fmt_name(ref.fmt),
+                       ref.path);
+            }
+            return NULL;
         }
-        return NULL;
-    }
 
-    if (!art_open(io, &ref, &rd, &src, yield_to_audio, NULL)) {
-        printf("art: could not open %s\r\n", ref.path);
-        return NULL;
-    }
-    r = art_decode_jpeg(&src, g_img, size, &g_work, &info);
-    art_close(&rd);
+        if (!art_open(io, &ref, &rd, &src, yield_to_audio, NULL)) {
+            printf("art: could not open %s\r\n", ref.path);
+            continue;
+        }
+        r = art_decode_jpeg(&src, g_img, size, &g_work, &info);
+        art_close(&rd);
 
-    if (r != ART_OK) {
-        printf("art: decode failed (%s): %s\r\n", art_result_name(r),
-               ref.path);
-        return NULL;
+        if (r == ART_OK) break;
+        printf("art: decode failed (%s), %ux%u: %s\r\n", art_result_name(r),
+               (unsigned)info.src_w, (unsigned)info.src_h, ref.path);
     }
+    if (n == 4) return NULL;
 
     printf("art: %s, %ux%u -> %d px (1/%u) in %lu ms: %s\r\n",
            art_from_name(ref.from), (unsigned)info.src_w,
